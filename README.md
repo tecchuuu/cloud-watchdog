@@ -62,8 +62,11 @@ export TF_DATA_DIR=/tmp/tofu-data
 
 ### 4. Create the infrastructure
 
+Save the email address alerts should go to (replace `you@gmail.com`). This file stays on CloudShell and is never committed:
+
 ```bash
 cd infra
+echo 'alert_email = "you@gmail.com"' > terraform.tfvars
 tofu init
 ```
 
@@ -76,9 +79,37 @@ tofu apply
 
 `tofu plan` lists everything that will be created. `tofu apply` shows the same list and asks for confirmation: type `yes`.
 
-You should see `Apply complete!` and three outputs: `actions_table`, `findings_table` and `reports_bucket`. In the console you can now find the two tables under **DynamoDB → Tables** and the bucket `watchdog-reports-<account-id>` under **S3**.
+You should see `Apply complete!` and the outputs `actions_table`, `findings_table`, `reports_bucket`, `scanner_function_name` and `sns_topic_arn`. In the console you can now find:
 
-_Next steps (SNS, Lambdas, EventBridge, Amplify, Cognito, API Gateway) coming soon._
+| Service | Where to look | What's there |
+|---|---|---|
+| DynamoDB | Tables | `watchdog_findings`, `watchdog_actions` |
+| S3 | Buckets | `watchdog-reports-<account-id>` |
+| Lambda | Functions | `watchdog-scanner` |
+| EventBridge | Rules | `watchdog-daily-scan` (runs once a day) |
+| SNS | Topics | `watchdog-alerts` |
+| CloudWatch | Alarms | `watchdog-scanner-errors` |
+
+### 5. Confirm the alert email
+
+AWS sends an email titled **AWS Notification - Subscription Confirmation** to the address from step 4. Click **Confirm subscription**. Until you do, no alerts arrive (check spam if you don't see it).
+
+### 6. Test the scanner
+
+The scanner runs once a day on its own. To run it now, plant some test problems ([Test scripts](#test-scripts)) and call the Lambda by hand:
+
+```bash
+cd ~/cloud-watchdog
+bash scripts/plant-mess.sh
+aws lambda invoke --function-name watchdog-scanner --cli-read-timeout 150 /tmp/out.json
+cat /tmp/out.json
+```
+
+You should see `"StatusCode": 200`, then a summary with `"grade": "F"`, `"new": 4` and `"errors": []`. Within a minute an email **Cloud Watchdog: 4 new issue(s)** arrives. Its logs are in **CloudWatch → Log groups → /aws/lambda/watchdog-scanner**.
+
+Clean up with `bash scripts/clean-mess.sh`.
+
+_Next steps (actions Lambda, Amplify, Cognito, API Gateway) coming soon._
 
 ## Test scripts
 
