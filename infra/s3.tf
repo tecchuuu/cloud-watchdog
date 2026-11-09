@@ -40,7 +40,7 @@ resource "terraform_data" "reports_bucket" {
     interpreter = ["bash", "-c"]
     environment = { BUCKET = self.input }
     command     = <<-EOT
-      if aws s3api head-bucket --bucket "$BUCKET" 2> /dev/null; then
+      if aws s3api head-bucket --bucket "$BUCKET" > /dev/null 2>&1; then
         aws s3 rb "s3://$BUCKET" --force
       else
         echo "Bucket $BUCKET already gone"

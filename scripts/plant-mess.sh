@@ -67,7 +67,7 @@ fi
 # ------------------------------------------------------------ 3. Public bucket
 BUCKET="watchdog-test-public-${ACCOUNT_ID}"
 
-if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+if aws s3api head-bucket --bucket "$BUCKET" > /dev/null 2>&1; then
   echo "[3/4] Bucket already exists, reusing:     ${BUCKET}"
 else
   aws s3api create-bucket --region "$REGION" --bucket "$BUCKET" > /dev/null

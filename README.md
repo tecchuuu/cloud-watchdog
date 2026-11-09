@@ -76,7 +76,48 @@ tofu apply
 
 `tofu plan` lists everything that will be created. `tofu apply` shows the same list and asks for confirmation: type `yes`.
 
+You should see `Apply complete!` and three outputs: `actions_table`, `findings_table` and `reports_bucket`. In the console you can now find the two tables under **DynamoDB → Tables** and the bucket `watchdog-reports-<account-id>` under **S3**.
+
 _Next steps (SNS, Lambdas, EventBridge, Amplify, Cognito, API Gateway) coming soon._
+
+## Test scripts
+
+Two scripts create and remove fake problems, so you can see the Watchdog find them. Everything they create is tagged `watchdog-test=true`, and nothing else is touched.
+
+**Plant the mess** (from the `cloud-watchdog` folder):
+
+```bash
+bash scripts/plant-mess.sh
+```
+
+This creates, in us-east-1:
+
+| Problem | Type |
+|---|---|
+| An Elastic IP not attached to anything | Cost |
+| Security group `watchdog-test-open-ssh` with SSH open to `0.0.0.0/0` | Security |
+| Public bucket `watchdog-test-public-<account-id>` | Security |
+| A 1 GiB EBS volume not attached to anything | Cost |
+
+Add `--ec2` to also launch an idle t3.micro. It only counts as idle after running for `IDLE_HOURS` (24 by default), so for a quick test run the scanner with `IDLE_HOURS=2` and wait 2 hours.
+
+**Run the scanner by hand** (before the Lambda exists). Pointing it at the table and bucket from step 4 lets it remember earlier scans:
+
+```bash
+export FINDINGS_TABLE=watchdog_findings
+export REPORTS_BUCKET=$(cd infra && tofu output -raw reports_bucket)
+python3 lambda/scanner.py
+```
+
+The first run shows the 4 planted problems as `NEW` with grade **F (15/100)**. Run it again and they show as `OPEN`. If you have other leftovers in your account (an old `launch-wizard-1` security group is common), they show up too: those are real findings.
+
+**Clean up:**
+
+```bash
+bash scripts/clean-mess.sh
+```
+
+Scan once more: the planted problems are now `FIXED`, and "Fixed so far" shows the dollars saved. `clean-mess.sh` is safe to run more than once.
 
 ## Demo
 

@@ -54,7 +54,7 @@ for REGION in "${REGIONS[@]}"; do
   # 5. Delete test security groups
   for SG in $(aws ec2 describe-security-groups --region "$REGION" \
       --filters "$TAG_FILTER" --query 'SecurityGroups[].GroupId' --output text); do
-    aws ec2 delete-security-group --region "$REGION" --group-id "$SG"
+    aws ec2 delete-security-group --region "$REGION" --group-id "$SG" > /dev/null
     echo "Deleted security group: $SG"
   done
 done
@@ -62,7 +62,7 @@ done
 # 6. Empty and delete the test bucket (S3 is global, so once, outside the loop)
 BUCKET="watchdog-test-public-${ACCOUNT_ID}"
 echo
-if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+if aws s3api head-bucket --bucket "$BUCKET" > /dev/null 2>&1; then
   aws s3 rm "s3://${BUCKET}" --recursive > /dev/null
   aws s3api delete-bucket --bucket "$BUCKET"
   echo "Deleted bucket:        $BUCKET"

@@ -540,7 +540,8 @@ def print_report(summary, findings):
         print(f"{'':<63}{f['detail']}")
 
     s = summary
-    print(f"\n{len(active)} open findings ({s['new']} new), "
+    plural = "finding" if len(active) == 1 else "findings"
+    print(f"\n{len(active)} open {plural} ({s['new']} new), "
           f"about ${s['wasted_usd']:.2f}/month wasted")
     print(f"Grade {s['grade']} ({s['score']}/100). "
           f"Fixed so far: {s['fixed_total']}, saving ${s['saved_usd']:.2f}/month")
