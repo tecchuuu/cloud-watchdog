@@ -8,10 +8,13 @@ Adding a new check = writing one more function and adding it to CHECKS.
 Right now this runs by hand in CloudShell:
     python3 lambda/scanner.py
 Saving to DynamoDB / S3 and emailing come in a later step.
+
+Checks: 1 unused Elastic IP, 2 admin ports open to the world, 3 public S3 bucket,
+        4 unattached EBS volume, 5 idle EC2 instance.
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import boto3
 from botocore.exceptions import ClientError
@@ -23,6 +26,17 @@ REGIONS = os.environ.get("REGIONS", "us-east-1,us-west-2").split(",")
 HOURS_PER_MONTH = 730
 EIP_HOURLY_USD = 0.005          # public IPv4 address, per hour
 MEDIUM_COST_USD = 20            # a cost finding this big becomes MEDIUM
+
+IDLE_CPU_PERCENT = float(os.environ.get("IDLE_CPU_PERCENT", "5"))
+IDLE_HOURS = int(os.environ.get("IDLE_HOURS", "24"))
+
+# EBS price per GB per month, us-east-1
+EBS_USD_PER_GB = {"gp3": 0.08, "gp2": 0.10, "io1": 0.125, "io2": 0.125,
+                  "st1": 0.045, "sc1": 0.015, "standard": 0.05}
+
+# EC2 on-demand price per hour, us-east-1 (unknown type = no estimate)
+EC2_USD_PER_HOUR = {"t2.micro": 0.0116, "t3.micro": 0.0104, "t2.small": 0.023,
+                    "t3.small": 0.0208, "t3.medium": 0.0416}
 
 ADMIN_PORTS = {22: "SSH", 3389: "RDP", 3306: "MySQL"}
 WORLD_IPV4 = "0.0.0.0/0"
@@ -221,8 +235,81 @@ def check_public_bucket():
     return findings
 
 
+def check_unattached_ebs(region):
+    """#4 EBS volumes not attached to any instance still cost money per GB."""
+    ec2 = boto3.client("ec2", region_name=region)
+    findings = []
+    pages = ec2.get_paginator("describe_volumes").paginate(
+        Filters=[{"Name": "status", "Values": ["available"]}])   # available = not attached
+    for page in pages:
+        for vol in page["Volumes"]:
+            tags = tag_dict(vol.get("Tags"))
+            if is_protected(tags):
+                continue
+            price = EBS_USD_PER_GB.get(vol["VolumeType"])
+            cost = round(vol["Size"] * price, 2) if price else None
+            findings.append(make_finding(
+                check="unattached_ebs", category="cost", severity="LOW",
+                region=region,
+                resource_id=vol["VolumeId"],
+                resource_name=tags.get("Name", vol["VolumeId"]),
+                detail=f"{vol['Size']} GiB {vol['VolumeType']} volume is not attached to any instance",
+                est_monthly_usd=cost,
+            ))
+    return findings
+
+
+def _hourly_cpu(cloudwatch, instance_id):
+    """Average CPU % for each hour of the last IDLE_HOURS hours."""
+    end = datetime.now(timezone.utc)
+    stats = cloudwatch.get_metric_statistics(
+        Namespace="AWS/EC2",
+        MetricName="CPUUtilization",
+        Dimensions=[{"Name": "InstanceId", "Value": instance_id}],
+        StartTime=end - timedelta(hours=IDLE_HOURS),
+        EndTime=end,
+        Period=3600,                 # one data point per hour
+        Statistics=["Average"],
+    )
+    return [p["Average"] for p in stats["Datapoints"]]
+
+
+def check_idle_ec2(region):
+    """#5 Running instances whose CPU stayed under IDLE_CPU_PERCENT every hour."""
+    ec2 = boto3.client("ec2", region_name=region)
+    cloudwatch = boto3.client("cloudwatch", region_name=region)
+    findings = []
+    pages = ec2.get_paginator("describe_instances").paginate(
+        Filters=[{"Name": "instance-state-name", "Values": ["running"]}])
+    for page in pages:
+        for reservation in page["Reservations"]:
+            for inst in reservation["Instances"]:
+                tags = tag_dict(inst.get("Tags"))
+                if is_protected(tags):
+                    continue
+                cpu = _hourly_cpu(cloudwatch, inst["InstanceId"])
+                if not cpu:
+                    continue          # no CPU data yet: too new to judge
+                if max(cpu) >= IDLE_CPU_PERCENT:
+                    continue          # busy at least once: not idle
+
+                itype = inst["InstanceType"]
+                hourly = EC2_USD_PER_HOUR.get(itype)
+                findings.append(make_finding(
+                    check="idle_ec2", category="cost", severity="LOW",
+                    region=region,
+                    resource_id=inst["InstanceId"],
+                    resource_name=tags.get("Name", inst["InstanceId"]),
+                    detail=(f"{itype} has been under {IDLE_CPU_PERCENT:g}% CPU for "
+                            f"{len(cpu)} h (peak {max(cpu):.1f}%)"),
+                    est_monthly_usd=round(hourly * HOURS_PER_MONTH, 2) if hourly else None,
+                ))
+    return findings
+
+
 # Per-region checks run once for each region in REGIONS; global ones run once.
-REGIONAL_CHECKS = [check_unused_eip, check_open_admin_ports]
+REGIONAL_CHECKS = [check_unused_eip, check_open_admin_ports,
+                   check_unattached_ebs, check_idle_ec2]
 GLOBAL_CHECKS = [check_public_bucket]
 
 
