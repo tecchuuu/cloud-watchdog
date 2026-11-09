@@ -289,7 +289,8 @@ def _hourly_cpu(cloudwatch, instance_id):
 
 
 def check_idle_ec2(region):
-    """#5 Running instances whose CPU stayed under IDLE_CPU_PERCENT every hour."""
+    """#5 Instances running for at least IDLE_HOURS whose CPU stayed under
+    IDLE_CPU_PERCENT every hour of that time. (LaunchTime resets on every start.)"""
     ec2 = boto3.client("ec2", region_name=region)
     cloudwatch = boto3.client("cloudwatch", region_name=region)
     findings = []
@@ -301,6 +302,9 @@ def check_idle_ec2(region):
                 tags = tag_dict(inst.get("Tags"))
                 if is_protected(tags):
                     continue
+                running_for = datetime.now(timezone.utc) - inst["LaunchTime"]
+                if running_for < timedelta(hours=IDLE_HOURS):
+                    continue          # started too recently to call it idle
                 cpu = _hourly_cpu(cloudwatch, inst["InstanceId"])
                 if not cpu:
                     continue          # no CPU data yet: too new to judge
