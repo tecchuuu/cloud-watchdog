@@ -11,3 +11,11 @@ output "findings_table" {
 output "actions_table" {
   value = aws_dynamodb_table.actions.name
 }
+
+output "scanner_function_name" {
+  value = aws_lambda_function.scanner.function_name
+}
+
+output "sns_topic_arn" {
+  value = aws_sns_topic.alerts.arn
+}

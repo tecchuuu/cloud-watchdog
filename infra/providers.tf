@@ -8,6 +8,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.40, < 7.0"
     }
+    archive = {
+      source  = "hashicorp/archive" # zips the Lambda code
+      version = ">= 2.4"
+    }
   }
 }
 

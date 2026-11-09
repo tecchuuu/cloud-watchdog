@@ -34,3 +34,6 @@ docs/*.synctex.gz
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Lambda zips built by OpenTofu
+infra/build/

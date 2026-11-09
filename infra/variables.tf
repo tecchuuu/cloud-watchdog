@@ -1,6 +1,16 @@
 # Inputs you can change without editing the other files.
 # Example: tofu apply -var="idle_hours=2"
 
+variable "alert_email" {
+  description = "Where new issues and scanner errors are emailed (you must confirm the first AWS email)"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alert_email))
+    error_message = "alert_email must be an email address, e.g. you@gmail.com"
+  }
+}
+
 variable "aws_region" {
   description = "Region the Watchdog itself is deployed in"
   type        = string
