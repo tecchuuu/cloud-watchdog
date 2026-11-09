@@ -1,0 +1,4 @@
+# Scripts run in CloudShell (Linux): keep Unix line endings even when committed from Windows
+*.sh   text eol=lf
+*.py   text eol=lf
+*.tf   text eol=lf

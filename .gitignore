@@ -1,0 +1,36 @@
+# OpenTofu / Terraform state and caches (state can contain secrets)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfvars
+crash.log
+
+# Lambda zips built by archive_file
+*.zip
+
+# Keys and credentials
+*.pem
+*.key
+.env
+.aws/
+
+# Generated dashboard config (built from tofu output)
+web/config.js
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# LaTeX build output
+docs/*.aux
+docs/*.log
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.synctex.gz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
