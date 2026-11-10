@@ -124,7 +124,44 @@ You should see `HTTP 200` each time, the fix result `"OK"`, and `"ok": true` fro
 
 Clean up with `bash scripts/clean-mess.sh`.
 
-_Next steps (Cognito, API Gateway, dashboard) coming soon._
+### 8. Cognito: the login (by hand)
+
+Cognito keeps the list of people allowed into the dashboard and runs the login page. You set it up in the console so you see every piece.
+
+You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu output dashboard_url`).
+
+**Create the user pool and app client**
+
+1. Console → **Cognito** → **User pools** → **Create user pool**.
+2. **Application type:** **Single-page application (SPA)**. The dashboard is plain JavaScript in the browser, so it can't keep a secret; this type gives an app client with no secret, using the "code + PKCE" login.
+3. **Name your application:** `watchdog-dashboard`
+4. **Options for sign-in identifiers:** tick **Username** only. (Watchdog writes this username into the audit log. With email-only sign-in it would be a random ID.)
+5. **Self-registration:** leave it **off**. Only you create accounts; strangers can't sign up.
+6. **Return URL:** paste your `dashboard_url`, e.g. `https://main.xxxxxxxx.amplifyapp.com/` (with the `/` at the end).
+7. **Create user directory**.
+
+**Allow the sign-out URL**
+
+8. In the new pool: **Applications → App clients → watchdog-dashboard → Login pages** tab → **Edit**.
+9. Check **Allowed callback URLs** has your `dashboard_url`. Under **Allowed sign-out URLs**, add the same `dashboard_url`.
+10. Check **OAuth grant types** has **Authorization code grant**, and **OpenID Connect scopes** has **OpenID** and **Email**. **Save changes**.
+
+**Create your user**
+
+11. **User management → Users → Create user**.
+12. Choose **Don't send an invitation**. Type a **User name** (e.g. your name; it shows up in the audit log), choose **Set a password** and type a temporary password. Leave **Mark phone number as verified** and email unticked. **Create user**.
+
+The first time you log in, Cognito asks you to choose a new password.
+
+**Write these down** (you need them in steps 9 and 10):
+
+| What | Where | Looks like |
+|---|---|---|
+| User pool ID | Pool **Overview** | `us-east-1_AbCdEf123` |
+| Client ID | **App clients** list | `1h57kf5cpq17m0eml12EXAMPLE` |
+| Cognito domain | **Branding → Domain** | `https://us-east-1abcdef.auth.us-east-1.amazoncognito.com` |
+
+_Next steps (API Gateway, dashboard) coming soon._
 
 ## Test scripts
 
