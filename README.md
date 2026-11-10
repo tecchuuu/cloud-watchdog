@@ -79,16 +79,17 @@ tofu apply
 
 `tofu plan` lists everything that will be created. `tofu apply` shows the same list and asks for confirmation: type `yes`.
 
-You should see `Apply complete!` and the outputs `actions_table`, `findings_table`, `reports_bucket`, `scanner_function_name` and `sns_topic_arn`. In the console you can now find:
+You should see `Apply complete!` and a list of outputs. **Copy `dashboard_url`** somewhere: you need it for Cognito in step 8. (Read the outputs again any time with `tofu output`.) In the console you can now find:
 
 | Service | Where to look | What's there |
 |---|---|---|
 | DynamoDB | Tables | `watchdog_findings`, `watchdog_actions` |
 | S3 | Buckets | `watchdog-reports-<account-id>` |
-| Lambda | Functions | `watchdog-scanner` |
+| Lambda | Functions | `watchdog-scanner`, `watchdog-actions` |
 | EventBridge | Rules | `watchdog-daily-scan` (runs once a day) |
 | SNS | Topics | `watchdog-alerts` |
 | CloudWatch | Alarms | `watchdog-scanner-errors` |
+| Amplify | All apps | `watchdog-dashboard` (empty until step 10) |
 
 ### 5. Confirm the alert email
 
@@ -107,9 +108,23 @@ cat /tmp/out.json
 
 You should see `"StatusCode": 200`, then a summary with `"grade": "F"`, `"new": 4` and `"errors": []`. Within a minute an email **Cloud Watchdog: 4 new issue(s)** arrives. Its logs are in **CloudWatch → Log groups → /aws/lambda/watchdog-scanner**.
 
+Leave the mess planted for step 7.
+
+### 7. Test the actions Lambda
+
+`watchdog-actions` does Fix / Delete / Ignore and answers the dashboard. Before API Gateway exists, `scripts/invoke-actions.sh` calls it the way API Gateway will:
+
+```bash
+bash scripts/invoke-actions.sh "GET /findings"
+bash scripts/invoke-actions.sh "POST /fix" '{"finding_ids":["<a finding_id from the list>"]}'
+bash scripts/invoke-actions.sh "GET /verify-log"
+```
+
+You should see `HTTP 200` each time, the fix result `"OK"`, and `"ok": true` from the log check.
+
 Clean up with `bash scripts/clean-mess.sh`.
 
-_Next steps (actions Lambda, Amplify, Cognito, API Gateway) coming soon._
+_Next steps (Cognito, API Gateway, dashboard) coming soon._
 
 ## Test scripts
 

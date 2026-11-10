@@ -24,3 +24,14 @@ output "actions_function_name" {
 output "sns_topic_arn" {
   value = aws_sns_topic.alerts.arn
 }
+
+output "amplify_app_id" {
+  description = "deploy-web.sh uploads the dashboard to this app"
+  value       = aws_amplify_app.dashboard.id
+}
+
+output "dashboard_url" {
+  description = "Open this in a browser. Also the Cognito callback / sign-out URL"
+  # Branch "main" of an app lives at https://main.<app's default domain>/
+  value = "https://${aws_amplify_branch.main.branch_name}.${aws_amplify_app.dashboard.default_domain}/"
+}
