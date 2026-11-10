@@ -22,6 +22,7 @@
 body { margin: 0; background: var(--bg); }
 main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
 h2 { font-size: 18px; margin: 32px 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+h2 button, h2 .right span { font-size: 14px; font-weight: 400; } /* don't copy the heading's big bold font */
 code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
 
 .muted { color: var(--muted); }
