@@ -408,8 +408,23 @@ def update_state(current, previous):
             continue
         if old["status"] in ("NEW", "OPEN"):
             old.update(status="FIXED", fixed_at=now)              # gone since last scan
+        elif old["status"] == "IGNORED" and _resource_gone(old):
+            old.update(status="FIXED", fixed_at=now)              # ignored, then deleted
         result[finding_id] = old                                  # keep FIXED/IGNORED history
     return list(result.values())
+
+
+def _resource_gone(finding):
+    """Checks skip ignored resources, so they never show up in `current`.
+    Ask actions.py's inspect function whether the resource still exists."""
+    from actions import HANDLERS    # imported here: actions.py imports this file too
+    handler = HANDLERS.get(finding["check"])
+    if not handler:
+        return False
+    try:
+        return handler["inspect"](finding) is None    # None = resource no longer exists
+    except ClientError:
+        return False                                  # can't tell: keep it as IGNORED
 
 
 def save_findings(table, findings):

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="loading-bar" class="loading-bar" hidden></div>
   <header class="topbar">
     <div class="brand">Cloud Watchdog</div>
     <nav class="tabs">
@@ -57,7 +58,9 @@
             <th></th>
           </tr>
         </thead>
-        <tbody id="findings-body"></tbody>
+        <tbody id="findings-body">
+          <tr><td colspan="7" class="loading-row"><span class="spinner"></span> Loading findings…</td></tr>
+        </tbody>
       </table>
       <p id="findings-empty" class="empty" hidden>No problems found. 🎉</p>
     </section>
@@ -120,7 +123,7 @@
   <dialog id="popup">
     <h3 id="popup-title"></h3>
     <div id="popup-body"></div>
-    <div class="popup-buttons">
+    <div class="popup-buttons" id="popup-buttons">
       <button id="popup-cancel">Cancel</button>
       <button id="popup-ok" class="primary">Confirm</button>
     </div>

@@ -56,9 +56,26 @@ function toast(message, isError = false) {
 
 // ---------------------------------------------------------------- the API
 
+// While any request is running, a thin moving bar shows at the top of the page,
+// so the user always knows the app is working (HCI: visibility of system status).
+let pending = 0;
+function setLoading(delta) {
+  pending += delta;
+  $("loading-bar").hidden = pending === 0;
+}
+
 // Call one route, e.g. api("POST", "/fix", {finding_ids: [...]}).
-// Sends the ID token; on 401 tries one refresh, then sends you to the login page.
 async function api(method, path, body) {
+  setLoading(+1);
+  try {
+    return await apiCall(method, path, body);
+  } finally {
+    setLoading(-1);
+  }
+}
+
+// Sends the ID token; on 401 tries one refresh, then sends you to the login page.
+async function apiCall(method, path, body) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const token = await getToken();
     if (!token) return login();
@@ -148,7 +165,8 @@ function popup(title, html, { okText = "Confirm", danger = false, showCancel = t
   $("popup-ok").textContent = okText;
   $("popup-ok").className = danger ? "danger" : "primary";
   $("popup-cancel").hidden = !showCancel;
-  $("popup").showModal();
+  $("popup-buttons").hidden = false;
+  if (!$("popup").open) $("popup").showModal();
   return new Promise((resolve) => {
     $("popup-ok").onclick = () => { $("popup").close(); resolve(true); };
     $("popup-cancel").onclick = () => { $("popup").close(); resolve(false); };
@@ -156,11 +174,38 @@ function popup(title, html, { okText = "Confirm", danger = false, showCancel = t
   });
 }
 
-function busy(button, text) {
+// Popup with a spinner and no buttons, shown while a request runs.
+// The next popup() or closeWorking() replaces it.
+function working(title) {
+  $("popup-title").textContent = title;
+  $("popup-body").innerHTML = `<p class="muted"><span class="spinner"></span> Working on it…</p>`;
+  $("popup-buttons").hidden = true;
+  if (!$("popup").open) $("popup").showModal();
+}
+
+function closeWorking() {
+  if ($("popup").open && $("popup-buttons").hidden) $("popup").close();
+}
+
+// Button shows a spinner + text while busy. With countSeconds, the text
+// counts up ("Scanning… 12s") so a long wait doesn't look frozen.
+function busy(button, text, countSeconds = false) {
   const old = button.textContent;
+  const started = Date.now();
   button.disabled = true;
-  button.textContent = text;
-  return () => { button.disabled = false; button.textContent = old; };
+  button.classList.add("is-busy");
+  const show = () => {
+    const secs = Math.round((Date.now() - started) / 1000);
+    button.textContent = countSeconds && secs > 0 ? `${text} ${secs}s` : text;
+  };
+  show();
+  const timer = countSeconds ? setInterval(show, 1000) : null;
+  return () => {
+    clearInterval(timer);
+    button.disabled = false;
+    button.classList.remove("is-busy");
+    button.textContent = old;
+  };
 }
 
 // ----------------------------------------------------------------- actions
@@ -168,7 +213,14 @@ function busy(button, text) {
 // Fix or Delete: preview first (changes nothing), confirm, then do it.
 async function fixOrDelete(action, ids) {
   if (!ids.length) return;
-  const { preview } = await api("POST", "/preview", { action, finding_ids: ids });
+  const verb = action === "FIX" ? "Fix" : "Delete";
+  working(`${verb}: checking what will change…`);
+  let preview;
+  try {
+    ({ preview } = await api("POST", "/preview", { action, finding_ids: ids }));
+  } finally {
+    closeWorking();
+  }
   const rows = preview.map((p) =>
     `<li><b>${esc(p.resource_name || p.finding_id)}</b> <span class="muted">${esc(p.region || "")}</span><br>${esc(p.will)}</li>`
   ).join("");
@@ -180,8 +232,13 @@ async function fixOrDelete(action, ids) {
     { okText: action === "FIX" ? "Fix" : "Delete", danger: action === "DELETE" });
   if (!ok) return;
 
-  const { results } = await api("POST", action === "FIX" ? "/fix" : "/delete", { finding_ids: ids });
-  await showResults(results);
+  working(`${action === "FIX" ? "Fixing" : "Deleting"} ${ids.length} finding${ids.length > 1 ? "s" : ""}…`);
+  try {
+    const { results } = await api("POST", action === "FIX" ? "/fix" : "/delete", { finding_ids: ids });
+    await showResults(results);
+  } finally {
+    closeWorking();
+  }
 }
 
 async function ignore(id) {
@@ -194,8 +251,13 @@ async function ignore(id) {
   if (!ok) return;
   const reason = $("ignore-reason").value.trim();
   if (!reason) return toast("Ignore needs a reason", true);
-  const { results } = await api("POST", "/ignore", { finding_id: id, reason });
-  await showResults(results);
+  working(`Ignoring ${f.resource_name}…`);
+  try {
+    const { results } = await api("POST", "/ignore", { finding_id: id, reason });
+    await showResults(results);
+  } finally {
+    closeWorking();
+  }
 }
 
 async function showResults(results) {
@@ -210,7 +272,7 @@ async function showResults(results) {
 }
 
 async function scanNow() {
-  const done = busy($("scan-now"), "Scanning…");
+  const done = busy($("scan-now"), "Scanning…", true); // ~10-25 s, so count the seconds
   try {
     const s = await api("POST", "/scan");
     toast(`Scan done: grade ${s.grade}, ${s.new} new, ${s.open} still open`);
@@ -227,6 +289,9 @@ async function scanNow() {
 // --------------------------------------------------------------- report view
 
 async function loadReport() {
+  if (!lastReport) {
+    $("log-body").innerHTML = `<tr><td colspan="8" class="loading-row"><span class="spinner"></span> Loading report…</td></tr>`;
+  }
   const r = await api("GET", "/report");
   lastReport = r;
   const s = r.summary;
