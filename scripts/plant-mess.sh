@@ -66,13 +66,21 @@ if [[ "$SG_ID" == "None" ]]; then
     --vpc-id "$VPC_ID" \
     --tag-specifications "ResourceType=security-group,Tags=[{Key=${TAG_KEY},Value=${TAG_VALUE}}]" \
     --query GroupId --output text)
-  aws ec2 authorize-security-group-ingress \
-    --region "$REGION" \
-    --group-id "$SG_ID" \
-    --protocol tcp --port 22 --cidr 0.0.0.0/0 > /dev/null
-  echo "[2/4] Security group with SSH open to 0.0.0.0/0: ${SG_ID}"
+  echo "[2/4] Security group created:              ${SG_ID}"
 else
   echo "[2/4] Security group already exists, reusing: ${SG_ID}"
+fi
+
+# Always (re)open SSH: if Watchdog fixed this group earlier, the group is still
+# here but the rule is gone. "Duplicate" just means it's already open.
+if aws ec2 authorize-security-group-ingress \
+     --region "$REGION" \
+     --group-id "$SG_ID" \
+     --protocol tcp --port 22 --cidr 0.0.0.0/0 > /dev/null 2>/tmp/plant-sg.err \
+   || grep -q "InvalidPermission.Duplicate" /tmp/plant-sg.err; then
+  echo "      ...SSH (22) open to 0.0.0.0/0"
+else
+  cat /tmp/plant-sg.err; exit 1
 fi
 
 # ------------------------------------------------------------ 3. Public bucket
