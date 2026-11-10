@@ -137,6 +137,7 @@ You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu ou
 3. **Name your application:** `watchdog-dashboard`
 4. **Options for sign-in identifiers:** tick **Username** only. (Watchdog writes this username into the audit log. With email-only sign-in it would be a random ID.)
 5. **Self-registration:** leave it **off**. Only you create accounts; strangers can't sign up.
+   **Required attributes for sign-up:** choose **email** (Cognito insists on email or phone when you sign in with a username). These two choices can't be changed later.
 6. **Return URL:** paste your `dashboard_url`, e.g. `https://main.xxxxxxxx.amplifyapp.com/` (with the `/` at the end).
 7. **Create user directory**.
 
@@ -149,7 +150,7 @@ You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu ou
 **Create your user**
 
 11. **User management → Users → Create user**.
-12. Choose **Don't send an invitation**. Type a **User name** (e.g. your name; it shows up in the audit log), choose **Set a password** and type a temporary password. Leave **Mark phone number as verified** and email unticked. **Create user**.
+12. Choose **Don't send an invitation**. Type a **User name** (e.g. your name; it shows up in the audit log) and your **Email address**, tick **Mark email address as verified**, choose **Set a password** and type a temporary password. **Create user**.
 
 The first time you log in, Cognito asks you to choose a new password.
 
