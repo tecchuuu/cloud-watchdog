@@ -1,0 +1,81 @@
+% architecture.tex — Cloud Watchdog architecture diagram.
+% Build: latexmk -pdf architecture.tex   (makes architecture.pdf)
+%
+% "standalone" makes a PDF exactly the size of the picture (no page, no margins),
+% so it drops straight into slides or the report. TikZ draws the boxes and arrows.
+
+\documentclass[tikz, border=10pt]{standalone}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+
+\begin{document}
+\begin{tikzpicture}[
+    font=\sffamily\small,
+    >={Stealth[length=2.2mm]},
+    % one style per kind of box, so the legend can explain them
+    svc/.style   ={draw, rounded corners=3pt, fill=blue!6, align=center,
+                   minimum width=31mm, minimum height=11mm},
+    hand/.style  ={svc, fill=orange!12, dashed},              % set up by hand in the console
+    data/.style  ={svc, fill=green!8},                        % where data is stored
+    actor/.style ={svc, fill=gray!12, rounded corners=8pt},   % people and the scanned account
+    lbl/.style   ={font=\sffamily\scriptsize, fill=white, inner sep=1.5pt, align=center},
+    flow/.style  ={->, thick},
+    sched/.style ={->, thick, densely dotted},
+  ]
+
+  % ---------------------------------------------------------------- boxes
+  \node[actor] (user)  at (0, 0)      {Admin\\(browser)};
+
+  \node[svc]   (amp)   at (5.2,  3.6) {Amplify\\\scriptsize dashboard files};
+  \node[hand]  (cog)   at (5.2,  1.8) {Cognito\\\scriptsize login, tokens};
+  \node[hand]  (apigw) at (5.2,  0)   {API Gateway\\\scriptsize HTTP API + JWT check};
+
+  \node[svc]   (act)   at (10.4, 0)   {Lambda\\\texttt{watchdog-actions}};
+  \node[svc]   (scan)  at (10.4,-3.6) {Lambda\\\texttt{watchdog-scanner}};
+  \node[svc]   (eb)    at (5.2, -3.6) {EventBridge\\\scriptsize \texttt{rate(1 day)}};
+
+  \node[data]  (find)  at (15.6, 1.8) {DynamoDB\\\texttt{watchdog\_findings}};
+  \node[data]  (log)   at (15.6, 0)   {DynamoDB\\\texttt{watchdog\_actions}\\\scriptsize audit log, hash chain};
+  \node[data]  (s3)    at (15.6,-1.8) {S3\\\scriptsize scan reports (JSON)};
+  \node[actor] (acct)  at (15.6,-3.6) {Your AWS account\\\scriptsize EIP, SG, S3, EBS, EC2\\\scriptsize us-east-1 + us-west-2};
+
+  \node[svc]   (sns)   at (5.2, -5.6) {SNS\\\scriptsize \texttt{watchdog-alerts}};
+  \node[svc]   (alarm) at (10.4,-5.6) {CloudWatch alarm\\\scriptsize scanner errors};
+  \node[actor] (mail)  at (0,  -5.6)  {Admin's\\email};
+
+  % ---------------------------------------------------- dashboard requests
+  \draw[flow] ([xshift=-6mm]user.north) |- node[lbl, pos=0.75] {\textbf{1} load page} (amp);
+  \draw[flow] ([xshift=6mm]user.north) |- node[lbl, pos=0.7] {\textbf{2} log in (code + PKCE)\\$\leftarrow$ ID token} (cog);
+  \draw[flow] (user) -- node[lbl] {\textbf{3} HTTPS\\+ Bearer token} (apigw);
+  \draw[->, dashed] (apigw) -- node[lbl] {check signature,\\audience, expiry} (cog);
+  \draw[flow] (apigw) -- node[lbl] {valid only:\\route + username} (act);
+
+  % -------------------------------------------------------- actions Lambda
+  \draw[flow] (act) -- node[lbl, sloped] {read / set status} (find.west);
+  \draw[flow] (act) -- node[lbl] {append entry} (log);
+  \draw[flow] (act) -- node[lbl, sloped, pos=0.8] {history} (s3.west);
+  \draw[flow] (act.south east) -- node[lbl, pos=0.55, left=1pt] {Fix / Delete /\\Ignore (tag)} (acct.north west);
+  \draw[flow] (act) -- node[lbl] {Scan now} (scan);
+
+  % ------------------------------------------------------- daily scan path
+  \draw[sched] (eb) -- node[lbl] {every day} (scan);
+  \draw[flow] (scan) -- node[lbl] {read only:\\describe / list} (acct);
+  \draw[flow] (scan.north east) -- node[lbl, pos=0.4] {save JSON} (s3.south west);
+  % around the outside, so it doesn't cross the other boxes
+  \draw[flow] ([xshift=-4mm]scan.south east) -- ++(0,-0.6) coordinate (a) -- (a -| 18.6,0) coordinate (b)
+        -- node[lbl, pos=0.35] {save\\NEW /\\OPEN /\\FIXED} (b |- find.east) -- (find.east);
+  \draw[flow] (scan) -- node[lbl, sloped] {new issues} (sns);
+  \draw[flow] (scan) -- node[lbl] {Errors metric} (alarm);
+  \draw[flow] (alarm) -- node[lbl] {alarm} (sns);
+  \draw[flow] (sns) -- node[lbl] {email} (mail);
+
+  % ---------------------------------------------------------------- legend
+  \node[svc,   minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k1) at (0, -2.1)  {OpenTofu};
+  \node[hand,  minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k2) at (0, -2.85) {by hand (README)};
+  \node[data,  minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k3) at (0, -3.6)  {storage (OpenTofu)};
+  \begin{scope}[on background layer]
+    \node[draw=gray!50, rounded corners, fit=(k1)(k2)(k3), inner sep=4pt,
+          label={[font=\sffamily\scriptsize\bfseries]above:Set up with}] {};
+  \end{scope}
+
+\end{tikzpicture}
+\end{document}

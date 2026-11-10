@@ -27,13 +27,24 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "Planting mess in account ${ACCOUNT_ID}, region ${REGION}"
 echo
 
+# Safe to run twice: every step first looks for a test resource it made earlier.
+
 # ---------------------------------------------------------------- 1. Elastic IP
-EIP_ALLOC=$(aws ec2 allocate-address \
+EIP_ALLOC=$(aws ec2 describe-addresses \
   --region "$REGION" \
-  --domain vpc \
-  --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=Name,Value=watchdog-test-eip}]" \
-  --query AllocationId --output text)
-echo "[1/4] Elastic IP allocated, not attached:   ${EIP_ALLOC}"
+  --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" \
+  --query 'Addresses[?AssociationId==null] | [0].AllocationId' --output text)
+
+if [[ "$EIP_ALLOC" == "None" ]]; then
+  EIP_ALLOC=$(aws ec2 allocate-address \
+    --region "$REGION" \
+    --domain vpc \
+    --tag-specifications "ResourceType=elastic-ip,Tags=[{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=Name,Value=watchdog-test-eip}]" \
+    --query AllocationId --output text)
+  echo "[1/4] Elastic IP allocated, not attached:   ${EIP_ALLOC}"
+else
+  echo "[1/4] Elastic IP already exists, reusing:   ${EIP_ALLOC}"
+fi
 
 # ---------------------------------------------- 2. Security group with open SSH
 VPC_ID=$(aws ec2 describe-vpcs \
@@ -102,16 +113,32 @@ else
 fi
 
 # -------------------------------------------------------- 4. Loose EBS volume
-VOL_ID=$(aws ec2 create-volume \
+VOL_ID=$(aws ec2 describe-volumes \
   --region "$REGION" \
-  --availability-zone "${REGION}a" \
-  --size 1 --volume-type gp3 \
-  --tag-specifications "ResourceType=volume,Tags=[{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=Name,Value=watchdog-test-volume}]" \
-  --query VolumeId --output text)
-echo "[4/4] 1 GiB gp3 volume, not attached:      ${VOL_ID}"
+  --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" Name=status,Values=available \
+  --query 'Volumes[0].VolumeId' --output text)
+
+if [[ "$VOL_ID" == "None" ]]; then
+  VOL_ID=$(aws ec2 create-volume \
+    --region "$REGION" \
+    --availability-zone "${REGION}a" \
+    --size 1 --volume-type gp3 \
+    --tag-specifications "ResourceType=volume,Tags=[{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=Name,Value=watchdog-test-volume}]" \
+    --query VolumeId --output text)
+  echo "[4/4] 1 GiB gp3 volume, not attached:      ${VOL_ID}"
+else
+  echo "[4/4] Volume already exists, reusing:      ${VOL_ID}"
+fi
 
 # ------------------------------------------------------ Optional: idle EC2
-if [[ "$LAUNCH_EC2" == true ]]; then
+EXISTING_EC2=$(aws ec2 describe-instances \
+  --region "$REGION" \
+  --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" Name=instance-state-name,Values=pending,running,stopped \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
+
+if [[ "$LAUNCH_EC2" == true && "$EXISTING_EC2" != "None" ]]; then
+  echo "[ec2] Test instance already exists, reusing: ${EXISTING_EC2}"
+elif [[ "$LAUNCH_EC2" == true ]]; then
   AMI_ID=$(aws ssm get-parameter \
     --region "$REGION" \
     --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \

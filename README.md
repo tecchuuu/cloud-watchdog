@@ -23,16 +23,21 @@ Built for small IT teams (2–10 people) that run AWS without a dedicated cloud 
 
 ```
 cloud-watchdog/
-├── infra/      OpenTofu: main.tf, variables.tf, outputs.tf
-├── lambda/     scanner.py, actions.py
-├── web/        dashboard (index.html, app.js, style.css)
-├── scripts/    plant-mess.sh, clean-mess.sh, deploy-web.sh
-└── docs/       architecture.tex
+├── infra/      OpenTofu, one file per service: s3, dynamodb, sns, lambda,
+│               eventbridge, alarm, amplify (+ providers, variables, outputs)
+├── lambda/     scanner.py (finds problems), actions.py (Fix/Delete/Ignore + API)
+├── web/        dashboard: index.html, auth.js (login), app.js, style.css
+├── scripts/    plant-mess.sh, clean-mess.sh   fake problems to find, and remove
+│               deploy-web.sh                  upload the dashboard to Amplify
+│               reset-demo.sh                  wipe findings/log/history for a demo
+│               invoke-actions.sh              call the API Lambda without a browser
+└── docs/       architecture.tex/.pdf (diagram), console-settings.md (every hand-typed
+                value explained), demo-script.md (video + live demo)
 ```
 
 ## Setup and deploy
 
-_Written step by step as each part is built. Steps below are tested; more are coming._
+Steps 1–7 use OpenTofu and scripts; steps 8–9 are done by hand in the console; step 10 uploads the dashboard. About 30 minutes.
 
 Everything runs in **AWS CloudShell** inside an AWS Academy Learner Lab. Nothing needs to be installed on your own computer.
 
@@ -272,15 +277,54 @@ The first run shows the 4 planted problems as `NEW` with grade **F (15/100)**. R
 bash scripts/clean-mess.sh
 ```
 
-Scan once more: the planted problems are now `FIXED`, and "Fixed so far" shows the dollars saved. `clean-mess.sh` is safe to run more than once.
+Scan once more: the planted problems are now `FIXED`, and the summary shows the dollars saved. Both scripts are safe to run more than once: `plant-mess.sh` reuses test resources that already exist instead of making duplicates.
 
 ## Demo
 
-_Coming soon._
+About 5 minutes: plant the mess, find it, fix it, prove it's gone.
+
+**The day before** (optional, for the 5th check): launch the idle EC2. It needs hours of CPU history before it counts as idle, like a real forgotten server. To flag it after 2 hours instead of 24:
+
+```bash
+bash scripts/plant-mess.sh --ec2
+cd infra && tofu apply -var idle_hours=2 && cd ..
+```
+
+**Right before** — start from a clean slate so "$ saved", history and the log show only the demo:
+
+```bash
+bash scripts/reset-demo.sh
+```
+
+**The demo:**
+
+1. Open the dashboard: no findings (or 1, the idle EC2).
+2. Run `bash scripts/plant-mess.sh`: 4 problems in seconds (Elastic IP, open SSH, public bucket, loose volume).
+3. **Scan now** → the findings with cost per month, risk and CIS labels (hover a label for the plain-English rule).
+4. **Delete** one by hand → red confirm popup → Delete.
+5. **Fix all** → preview of every change → Fix.
+6. **Scan now** → 0 findings, grade F → A.
+7. **Report** tab: $ saved, the audit log with your username, **Verify log** → intact.
+8. Show the SNS email and the EventBridge rule `watchdog-daily-scan`.
+
+Backup if a fix fails: `bash scripts/clean-mess.sh`.
 
 ## Cleanup
 
-_Coming soon._
+Removes everything, as if it was never installed. Do the hand-made parts first, then let OpenTofu remove the rest.
+
+1. **Test resources:** `bash scripts/clean-mess.sh`
+2. **API Gateway:** console → API Gateway → `watchdog-api` → **Delete**.
+3. **Cognito:** console → Cognito → your user pool → **Delete user pool**. If it refuses, first turn off **Deletion protection** (pool **Settings**), and delete the domain under **Branding → Domain**.
+4. **Everything else** (Lambdas, tables, bucket and reports, SNS, schedule, alarm, Amplify):
+   ```bash
+   cd ~/cloud-watchdog/infra
+   tofu destroy
+   ```
+   Type `yes`. You should see `Destroy complete!`.
+5. **Saved dashboard values:** `rm ~/.watchdog-web`
+
+To install again, start from step 4 of [Setup and deploy](#setup-and-deploy). Steps 8–9 give you a new pool ID, client ID, domain and API URL.
 
 ## Troubleshooting
 
@@ -297,3 +341,18 @@ To see what is using your home folder: `du -sh ~/* ~/.[!.]* 2>/dev/null | sort -
 
 **`tofu apply` fails with `s3:GetBucketObjectLockConfiguration ... explicit deny in a service control policy`**
 Learner Lab blocks that call, and OpenTofu's standard `aws_s3_bucket` resource always makes it. This repo already works around it (`infra/s3.tf` creates the bucket with the AWS CLI), so you should only see this if you add an `aws_s3_bucket` resource yourself.
+
+**`Error: Required plugins are not installed`**
+CloudShell was restarted and `/tmp` (where step 3 keeps OpenTofu's plugins) was wiped. Run `tofu init` in `infra/` again. `deploy-web.sh` does this for you.
+
+**The dashboard looks the same after `deploy-web.sh`**
+Your browser kept the old files. Hard refresh with **Ctrl+Shift+R** (Mac: Cmd+Shift+R).
+
+**The dashboard shows `Failed to fetch` or a CORS error (F12 → Console)**
+API Gateway → CORS → **Access-Control-Allow-Origin** must be your `dashboard_url` exactly, **without** the `/` at the end.
+
+**Cognito says `redirect_mismatch`**
+The app client's callback / sign-out URL must be your `dashboard_url` exactly, **with** the `/` at the end (step 8).
+
+**Scan now says it timed out**
+API Gateway gives up after 30 seconds, but the scan keeps running in Lambda. Wait a minute and refresh.

@@ -161,7 +161,7 @@ def check_open_admin_ports(region):
                 continue
 
             port_list = ", ".join(sorted(open_ports))
-            # CIS AWS Foundations v3.0: 5.2 = IPv4, 5.3 = IPv6 (TODO: confirm numbers)
+            # CIS AWS Foundations v3.0.0: 5.2 = from 0.0.0.0/0 (IPv4), 5.3 = from ::/0 (IPv6)
             findings.append(make_finding(
                 check="open_admin_ports", category="security", severity="HIGH",
                 region=region,
@@ -244,7 +244,7 @@ def check_public_bucket():
             check="public_bucket", category="security", severity=severity,
             region=region, resource_id=name, resource_name=name,
             detail=detail,
-            cis="CIS 2.1.4",   # TODO: confirm against CIS AWS Foundations v3.0
+            cis="CIS 2.1.4",   # CIS AWS Foundations v3.0.0: S3 Block Public Access
         ))
     return findings
 
