@@ -126,7 +126,7 @@ Clean up with `bash scripts/clean-mess.sh`.
 
 ### 8. Cognito: the login (by hand)
 
-Cognito keeps the list of people allowed into the dashboard and runs the login page. You set it up in the console so you see every piece.
+Cognito keeps the list of people allowed into the dashboard and runs the login page. You set it up in the console so you see every piece. Why each value is what it is: [docs/console-settings.md](docs/console-settings.md).
 
 You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu output dashboard_url`).
 
@@ -139,11 +139,11 @@ You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu ou
 5. **Self-registration:** leave it **off**. Only you create accounts; strangers can't sign up.
    **Required attributes for sign-up:** choose **email** (Cognito insists on email or phone when you sign in with a username). These two choices can't be changed later.
 6. **Return URL:** paste your `dashboard_url`, e.g. `https://main.xxxxxxxx.amplifyapp.com/` (with the `/` at the end).
-7. **Create user directory**.
+7. **Create user directory**. Cognito names the pool for you (e.g. `User pool - abc123`) and shows a **Quick setup guide** with React/Angular sample code. Skip it: the dashboard has its own login code.
 
 **Allow the sign-out URL**
 
-8. In the new pool: **Applications → App clients → watchdog-dashboard → Login pages** tab → **Edit**.
+8. Menu (☰, top left) → **User pools** → your new pool → **Applications → App clients → watchdog-dashboard → Login pages** tab → **Edit**.
 9. Check **Allowed callback URLs** has your `dashboard_url`. Under **Allowed sign-out URLs**, add the same `dashboard_url`.
 10. Check **OAuth grant types** has **Authorization code grant**, and **OpenID Connect scopes** has **OpenID** and **Email**. **Save changes**.
 
@@ -162,7 +162,63 @@ The first time you log in, Cognito asks you to choose a new password.
 | Client ID | **App clients** list | `1h57kf5cpq17m0eml12EXAMPLE` |
 | Cognito domain | **Branding → Domain** | `https://us-east-1abcdef.auth.us-east-1.amazoncognito.com` |
 
-_Next steps (API Gateway, dashboard) coming soon._
+### 9. API Gateway: the dashboard's door to Lambda (by hand)
+
+API Gateway gives `watchdog-actions` a public https:// address. Before any request reaches the Lambda, it checks the Cognito login token; requests without a valid token get `401 Unauthorized` and never run your code.
+
+**Create the API and connect it to Lambda**
+
+1. Console → **API Gateway** → **Create API** → **HTTP API** → **Build**.
+2. **Integrations → Add integration** → **Lambda**, region **us-east-1**, function **watchdog-actions**. Version **2.0**.
+3. **API name:** `watchdog-api` → **Next**.
+4. **Configure routes:** add these 8 routes, every one with target **watchdog-actions**. Pick the method from the dropdown; the path box gets only the path (`/findings`, not `GET /findings`):
+
+   | Method | Resource path |
+   |---|---|
+   | GET | `/findings` |
+   | GET | `/report` |
+   | GET | `/verify-log` |
+   | POST | `/scan` |
+   | POST | `/preview` |
+   | POST | `/fix` |
+   | POST | `/delete` |
+   | POST | `/ignore` |
+
+   → **Next**.
+5. **Stages:** keep `$default` with **Auto-deploy** on → **Next** → **Create**.
+
+The console also gives API Gateway permission to call the Lambda (you can see it in **Lambda → watchdog-actions → Configuration → Permissions**).
+
+**Require a login on every route**
+
+6. Left menu **Authorization** → **Manage authorizers** tab → **Create**.
+   - Type **JWT**, name `cognito`
+   - Identity source: `$request.header.Authorization` (the default)
+   - **Issuer URL:** `https://cognito-idp.us-east-1.amazonaws.com/<your user pool ID>`
+   - **Audience:** your **Client ID** → **Create**.
+7. **Attach authorizers to routes** tab: click each of the 8 routes, pick `cognito`, **Attach authorizer**. Every route should show a **JWT** badge.
+
+**Let the dashboard call it from the browser (CORS)**
+
+8. Left menu **CORS** → **Configure**:
+   - **Access-Control-Allow-Origin:** your `dashboard_url` **without** the `/` at the end, e.g. `https://main.xxxxxxxx.amplifyapp.com` (type it, then **Add**)
+   - **Access-Control-Allow-Headers:** `authorization`, `content-type`
+   - **Access-Control-Allow-Methods:** `GET`, `POST`
+   - **Save**.
+
+Browsers block a page from calling another site unless that site says it's allowed; this is where the API says "the dashboard may call me".
+
+**Write down** the **Invoke URL** from the API's **Overview** page (`https://abc123.execute-api.us-east-1.amazonaws.com`).
+
+**Test that the door is locked:**
+
+```bash
+curl -i https://<your invoke URL>/report
+```
+
+You should see `HTTP/2 401` and `{"message":"Unauthorized"}`: no token, no entry. With a token it works; the dashboard in step 10 sends one.
+
+_Next step (dashboard) coming soon._
 
 ## Test scripts
 
