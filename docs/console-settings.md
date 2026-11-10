@@ -46,6 +46,7 @@ Every value typed by hand in README steps 8–9, and why. For the demo and Q&A.
 | Issuer URL | `https://cognito-idp.us-east-1.amazonaws.com/<pool ID>` | Who must have signed the token. API Gateway fetches this pool's public keys and checks the signature. Tokens from other pools or made-up ones fail. |
 | Audience | Client ID | Which app the token was made for. Blocks tokens from your pool issued to a different app client. |
 | Attached to | All 8 routes | A route without the authorizer is open to anyone. |
+| Authorization scopes | None | Scopes are an extra check that only works with Cognito *access* tokens. The dashboard sends the *ID* token (it has `cognito:username`), so a scope here would lock it out. |
 
 Checks done on every request, before Lambda runs: signature, audience, expiry. The username from the token is passed to Lambda, which writes it into the audit log; the dashboard can't fake it.
 
@@ -62,3 +63,15 @@ Browsers block a page on one site (the Amplify URL) from reading answers from an
 | Allow-Credentials | No | We send the token in a header, not as cookies. |
 
 CORS is a browser rule, not security for the API: `curl` ignores it. The authorizer is the real lock.
+
+## Dashboard login (web/auth.js)
+
+| Piece | What it does |
+|---|---|
+| PKCE verifier | A random secret made in the browser and kept in the tab. Only its SHA-256 (the *challenge*) goes to Cognito. When the browser swaps the login code for tokens, it shows the verifier; a stolen code is useless without it. This replaces a client secret, which a browser app can't keep. |
+| state | Another random value, checked when Cognito sends you back, so nobody can slip their own login code into your browser. |
+| sessionStorage | Where the tokens live. Cleared when the tab closes, so closing the tab logs you out. |
+| Silent refresh | Before the 60-minute ID token runs out, the refresh token gets a new one. You stay logged in while the tab is open (up to 5 days). |
+| Logout | Revokes the refresh token at Cognito, clears the tab, and ends Cognito's login session. |
+| `Authorization: Bearer <ID token>` | Sent with every API call; that's the header the authorizer's identity source reads. |
+| Text escaping | Resource names come from AWS and anyone with access can name a resource `<script>…`. The dashboard always inserts them as text, never as HTML. |

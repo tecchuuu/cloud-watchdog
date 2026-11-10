@@ -1,0 +1,141 @@
+/* style.css — white, simple. Colours live in variables so they're easy to change. */
+
+:root {
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --line: #e3e6ea;
+  --text: #1d2125;
+  --muted: #6b7280;
+  --accent: #2563eb;
+  --high: #dc2626;
+  --medium: #d97706;
+  --low: #6b7280;
+  --good: #16a34a;
+  --radius: 8px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 60px; }
+h2 { font-size: 18px; margin: 32px 0 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: ui-monospace, Consolas, monospace; }
+.right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+.ok { color: var(--good); font-weight: 600; }
+.bad { color: var(--high); font-weight: 600; }
+.warn { color: var(--high); font-weight: 600; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 12px 20px; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; font-size: 18px; }
+.tabs { display: flex; gap: 4px; }
+.tab { border: none; background: none; padding: 8px 14px; border-radius: var(--radius); }
+.tab.active { background: var(--panel); font-weight: 600; }
+.who { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+/* ---------- buttons ---------- */
+button {
+  font: inherit; cursor: pointer; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text);
+}
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--high); border-color: #f3c4c4; }
+dialog button.danger { background: var(--high); border-color: var(--high); color: #fff; }
+button.link { border: none; background: none; color: var(--accent); padding: 0; }
+
+/* ---------- findings ---------- */
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar > div { display: flex; align-items: center; gap: 10px; }
+.buttons { flex-wrap: wrap; }
+.stale { color: var(--high); font-weight: 600; }
+
+.grade-badge {
+  display: inline-grid; place-items: center; width: 34px; height: 34px;
+  border-radius: 50%; font-weight: 700; color: #fff; background: var(--muted);
+}
+.grade-A, .grade-bg-A { background: var(--good); }
+.grade-B, .grade-bg-B { background: #65a30d; }
+.grade-C, .grade-bg-C { background: #ca8a04; }
+.grade-D, .grade-bg-D { background: var(--medium); }
+.grade-F, .grade-bg-F { background: var(--high); }
+.grade-text-A { color: var(--good); }
+.grade-text-F { color: var(--high); }
+
+.grid { width: 100%; border-collapse: collapse; }
+.grid th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+.grid td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.grid .num { text-align: right; white-space: nowrap; }
+.row-actions { white-space: nowrap; }
+.row-actions button { padding: 3px 8px; font-size: 13px; }
+tr.ignored { opacity: .55; }
+
+.sev, .status, .result {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
+}
+.sev-HIGH { background: #fee2e2; color: var(--high); }
+.sev-MEDIUM { background: #fef3c7; color: var(--medium); }
+.sev-LOW { background: var(--panel); color: var(--low); }
+.status-NEW { background: #dbeafe; color: var(--accent); }
+.status-OPEN { background: var(--panel); color: var(--text); }
+.status-IGNORED { background: var(--panel); color: var(--muted); }
+.result-OK { background: #dcfce7; color: var(--good); }
+.result-ALREADY_FIXED { background: var(--panel); color: var(--muted); }
+.result-FAILED { background: #fee2e2; color: var(--high); }
+
+/* CIS label with a tooltip on hover */
+.chip {
+  display: inline-block; font-size: 11px; padding: 1px 6px; margin-left: 4px;
+  border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; cursor: help;
+}
+
+/* Tooltips: any element with data-tip="..." */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  width: max-content; max-width: 300px; padding: 8px 10px; z-index: 10;
+  background: var(--text); color: #fff; font-size: 12px; font-weight: 400; line-height: 1.4;
+  border-radius: 6px; white-space: normal; pointer-events: none;
+}
+
+/* ---------- report ---------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.card { background: var(--panel); border-radius: var(--radius); padding: 16px; }
+.card-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+.card-big { font-size: 36px; font-weight: 700; margin: 4px 0; }
+.card-big.good { color: var(--good); }
+
+.chart {
+  display: flex; align-items: flex-end; gap: 6px; height: 140px;
+  padding: 8px; background: var(--panel); border-radius: var(--radius);
+}
+.bar-wrap { flex: 1; max-width: 40px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.bar { width: 100%; border-radius: 4px 4px 0 0; }
+.bar-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ---------- popup + toast ---------- */
+dialog { border: none; border-radius: 12px; padding: 24px; width: min(560px, 92vw); box-shadow: 0 20px 50px rgba(0,0,0,.2); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin-top: 0; }
+dialog textarea { width: 100%; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.preview { padding-left: 18px; max-height: 50vh; overflow: auto; }
+.preview li { margin-bottom: 10px; }
+.popup-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--text); color: #fff; padding: 10px 16px; border-radius: var(--radius);
+}
+.toast.error { background: var(--high); }

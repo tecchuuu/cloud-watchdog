@@ -218,7 +218,22 @@ curl -i https://<your invoke URL>/report
 
 You should see `HTTP/2 401` and `{"message":"Unauthorized"}`: no token, no entry. With a token it works; the dashboard in step 10 sends one.
 
-_Next step (dashboard) coming soon._
+### 10. Upload the dashboard
+
+```bash
+cd ~/cloud-watchdog
+bash scripts/deploy-web.sh
+```
+
+It asks for the three values you wrote down: the **API Gateway Invoke URL** (step 9), the **Cognito domain** and the **client ID** (step 8). It remembers them, so next time you just press Enter. Then it writes `web/config.js`, zips `web/` and uploads it to Amplify.
+
+You should see `Done. Open https://main.xxxxxxxx.amplifyapp.com/`. Open it:
+
+1. You land on Cognito's login page. Log in with the user from step 8 and choose a new password.
+2. You come back to the dashboard with your username at the top right.
+3. If the mess from step 6 is still planted, press **Scan now**, then try **Fix**, **Ignore** and the **Report** tab. Otherwise run `bash scripts/plant-mess.sh` first.
+
+Run `deploy-web.sh` again whenever you change anything in `web/`.
 
 ## Test scripts
 

@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  Cloud Watchdog dashboard. Plain HTML + JavaScript, no build step.
+  Amplify serves these files; the data comes from the API (API Gateway -> watchdog-actions).
+
+  Files:
+    config.js  written by scripts/deploy-web.sh (API URL, Cognito domain, client ID)
+    auth.js    Cognito login (code + PKCE), tokens, logout
+    app.js     everything you see: findings table, buttons, Report tab
+    style.css  colours and layout
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cloud Watchdog</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Cloud Watchdog</div>
+    <nav class="tabs">
+      <button class="tab active" data-view="findings">Findings</button>
+      <button class="tab" data-view="report">Report</button>
+    </nav>
+    <div class="who">
+      <span id="username"></span>
+      <button id="logout" class="link">Log out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ======================= Findings ======================= -->
+    <section id="view-findings" class="view">
+      <div class="toolbar">
+        <div>
+          <span id="grade-badge" class="grade-badge">–</span>
+          <span id="last-scan" class="muted">Last scan: …</span>
+        </div>
+        <div class="buttons">
+          <button id="scan-now">Scan now</button>
+          <button id="fix-selected" disabled>Fix selected</button>
+          <button id="delete-selected" class="danger" disabled>Delete selected</button>
+          <button id="fix-all" class="primary">Fix all</button>
+        </div>
+      </div>
+
+      <table class="grid">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all" title="Select all"></th>
+            <th>Risk</th>
+            <th>Status</th>
+            <th>Resource</th>
+            <th>Problem</th>
+            <th class="num">Cost / month</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="findings-body"></tbody>
+      </table>
+      <p id="findings-empty" class="empty" hidden>No problems found. 🎉</p>
+    </section>
+
+    <!-- ======================= Report ======================= -->
+    <section id="view-report" class="view" hidden>
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Grade</div>
+          <div class="card-big" id="r-grade">–</div>
+          <div class="muted" id="r-score"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Open problems</div>
+          <div class="card-big" id="r-open">–</div>
+          <div class="muted" id="r-counts"></div>
+        </div>
+        <div class="card">
+          <div class="card-label">Wasted now</div>
+          <div class="card-big" id="r-wasted">–</div>
+          <div class="muted">per month, still open</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Saved</div>
+          <div class="card-big good" id="r-saved">–</div>
+          <div class="muted" id="r-fixed"></div>
+        </div>
+      </div>
+
+      <h2>History <span class="muted small">last 30 scans</span></h2>
+      <div id="history-chart" class="chart"></div>
+
+      <h2>
+        Audit log
+        <span class="muted small">who did what, hash-chained</span>
+        <span class="right">
+          <span id="verify-result"></span>
+          <button id="verify-log">Verify log</button>
+          <button id="csv-log">Download log CSV</button>
+          <button id="csv-findings">Download findings CSV</button>
+        </span>
+      </h2>
+      <table class="grid">
+        <thead>
+          <tr><th>#</th><th>Time</th><th>User</th><th>Action</th><th>Result</th>
+              <th>Finding</th><th>Note</th><th>Hash</th></tr>
+        </thead>
+        <tbody id="log-body"></tbody>
+      </table>
+
+      <h2>Ignored <span class="muted small">tagged watchdog-ignore=true, skipped by scans</span></h2>
+      <table class="grid">
+        <thead><tr><th>Resource</th><th>Problem</th><th>Reason</th></tr></thead>
+        <tbody id="ignored-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <!-- One popup, reused for: preview + confirm, ignore reason, results -->
+  <dialog id="popup">
+    <h3 id="popup-title"></h3>
+    <div id="popup-body"></div>
+    <div class="popup-buttons">
+      <button id="popup-cancel">Cancel</button>
+      <button id="popup-ok" class="primary">Confirm</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
