@@ -68,7 +68,8 @@ async function handleRedirect() {
   history.replaceState(null, "", url.pathname); // remove ?code= from the address bar
 
   if (url.searchParams.get("state") !== sessionStorage.getItem("pkce_state")) {
-    throw new Error("login state didn't match; please log in again");
+    throw new Error("The login came back to a different tab or app than the one that started it, " +
+                    "so it was not accepted (a safety check).");
   }
   await tokenRequest({
     grant_type: "authorization_code",

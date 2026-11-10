@@ -613,6 +613,13 @@ setupTooltips();
     wireUp();
     await loadFindings();
   } catch (e) {
-    toast(friendly(e), true);
+    // The login didn't finish. Don't leave an empty page: say why, and offer to start again.
+    $("findings-body").innerHTML = `
+      <tr><td colspan="7" class="load-error">
+        <b>Login didn't finish.</b>
+        <div>${esc(friendly(e))}</div>
+        <button class="retry primary">Log in again</button>
+      </td></tr>`;
+    $("findings-body").querySelector(".retry").onclick = login;
   }
 })();
