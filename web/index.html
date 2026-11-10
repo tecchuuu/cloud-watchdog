@@ -14,6 +14,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cloud Watchdog</title>
+  <!-- Browser-tab icon: the same shield as the logo, written inline so there's no extra file to upload -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z' fill='%23ff9900'/%3E%3Cpath d='M6.5 12s2-3.5 5.5-3.5 5.5 3.5 5.5 3.5-2 3.5-5.5 3.5S6.5 12 6.5 12z' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='1.8' fill='%23ff9900'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
   <script>
     // Pick the theme before the page draws, so dark mode doesn't flash white first.
@@ -56,30 +58,32 @@
       <div class="toolbar">
         <h1 class="page-title">Findings <span id="findings-count" class="muted"></span></h1>
         <div class="buttons">
-          <button id="scan-now">Scan now</button>
-          <button id="fix-selected" disabled>Fix selected</button>
-          <button id="delete-selected" class="danger" disabled>Delete selected</button>
-          <button id="fix-all" class="primary">Fix all</button>
+          <button id="scan-now" title="Scan the account again now (takes 10 to 25 seconds)">Scan now</button>
+          <button id="fix-selected" disabled title="Fix the ticked rows: remove the risk, keep the resource. You see a preview first.">Fix selected</button>
+          <button id="delete-selected" class="danger" disabled title="Delete the ticked rows' resources for good. You are asked to confirm.">Delete selected</button>
+          <button id="fix-all" class="primary" title="Fix every finding in the list. You see a preview of each change first.">Fix all</button>
         </div>
       </div>
 
+      <div class="table-scroll">
       <table class="grid">
         <thead>
           <tr>
-            <th><input type="checkbox" id="select-all" title="Select all"></th>
+            <th><input type="checkbox" id="select-all" title="Select all" aria-label="Select all findings"></th>
             <th>Risk</th>
             <th>Status</th>
             <th>Resource</th>
             <th>Problem</th>
             <th class="num">Cost / month</th>
-            <th></th>
+            <th class="row-actions"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody id="findings-body">
           <tr><td colspan="7" class="loading-row"><span class="spinner"></span> Loading findings…</td></tr>
         </tbody>
       </table>
-      <p id="findings-empty" class="empty" hidden>No problems found. 🎉</p>
+      </div>
+      <p id="findings-empty" class="empty" hidden>No findings. Everything looks clean. 🎉</p>
       </div>
 
       <!-- Summary box: one label/value per row, easy to scan top to bottom -->
@@ -88,7 +92,7 @@
         <div class="summary-grade">
           <div class="summary-label">Grade</div>
           <div class="grade-row">
-            <span id="grade-badge" class="grade-letter">–</span>
+            <span id="grade-letter" class="grade-letter">–</span>
             <span id="s-score" class="muted"></span>
           </div>
           <div class="meter"><div id="s-meter" class="meter-fill"></div></div>
@@ -96,6 +100,8 @@
         <dl>
           <dt>Last scan</dt><dd id="last-scan">…</dd>
         </dl>
+        <!-- shown only when the last scan is too old or there is none: words, not just a red colour -->
+        <p id="stale-note" class="stale-note small" hidden></p>
         <dl>
           <dt><span class="dot dot-HIGH"></span>High</dt><dd id="s-high">–</dd>
           <dt><span class="dot dot-MEDIUM"></span>Medium</dt><dd id="s-medium">–</dd>
@@ -118,7 +124,7 @@
           <div class="muted" id="r-score"></div>
         </div>
         <div class="card">
-          <div class="card-label">Open problems</div>
+          <div class="card-label">Open findings</div>
           <div class="card-big" id="r-open">–</div>
           <div class="muted" id="r-counts"></div>
         </div>
@@ -158,6 +164,7 @@
       </div>
 
       <h2>Ignored <span class="muted small">tagged watchdog-ignore=true, skipped by scans</span></h2>
+      <p class="muted small hint">To stop ignoring one, remove the <code>watchdog-ignore</code> tag from the resource in the AWS console. It comes back as a finding on the next scan.</p>
       <div class="box">
       <table class="grid">
         <thead><tr><th>Resource</th><th>Problem</th><th>Reason</th></tr></thead>
@@ -178,6 +185,7 @@
   </dialog>
 
   <div id="toast" class="toast" hidden></div>
+  <div id="tip" class="tip" role="tooltip" hidden></div>
 
   <script src="config.js"></script>
   <script src="auth.js"></script>

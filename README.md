@@ -32,7 +32,8 @@ cloud-watchdog/
 │               reset-demo.sh                  wipe findings/log/history for a demo
 │               invoke-actions.sh              call the API Lambda without a browser
 └── docs/       architecture.tex/.pdf (diagram), console-settings.md (every hand-typed
-                value explained), demo-script.md (video + live demo)
+                value explained), dashboard-design.md (why the dashboard looks the way
+                it does), demo-script.md (video + live demo)
 ```
 
 ## Setup and deploy
@@ -111,7 +112,7 @@ aws lambda invoke --function-name watchdog-scanner --cli-read-timeout 150 /tmp/o
 cat /tmp/out.json
 ```
 
-You should see `"StatusCode": 200`, then a summary with `"grade": "F"`, `"new": 4` and `"errors": []`. Within a minute an email **Cloud Watchdog: 4 new issue(s)** arrives. Its logs are in **CloudWatch → Log groups → /aws/lambda/watchdog-scanner**.
+You should see `"StatusCode": 200`, then a summary with `"grade": "F"`, `"new": 4` and `"errors": []`. Within a minute an email **Cloud Watchdog: 4 new finding(s)** arrives. Its logs are in **CloudWatch → Log groups → /aws/lambda/watchdog-scanner**.
 
 Leave the mess planted for step 7.
 
@@ -239,6 +240,16 @@ You should see `Done. Open https://main.xxxxxxxx.amplifyapp.com/`. Open it:
 3. If the mess from step 6 is still planted, press **Scan now**, then try **Fix**, **Ignore** and the **Report** tab. Otherwise run `bash scripts/plant-mess.sh` first.
 
 Run `deploy-web.sh` again whenever you change anything in `web/`.
+
+**The three buttons**
+
+| Button | What it does | Can you undo it? |
+|---|---|---|
+| **Fix** | Removes the risk but keeps the resource (closes the open port, blocks public access, snapshots then removes a loose volume). You see a preview first. | Mostly: the audit log keeps what was changed |
+| **Delete** | Removes the resource for good. Asks you to confirm. | No |
+| **Ignore** | Tags the resource `watchdog-ignore=true` with your reason. Scans skip it. | Yes: remove that tag from the resource in the AWS console, and it comes back as a finding on the next scan |
+
+Under each resource name the dashboard shows its AWS ID (`sg-…`, `vol-…`): paste that into the console's search box to find it. Why the dashboard looks and behaves the way it does: [docs/dashboard-design.md](docs/dashboard-design.md).
 
 ## Test scripts
 

@@ -396,11 +396,11 @@ def update_state(current, previous):
         old = previous.get(f["finding_id"])
         if old is None or old["status"] == "FIXED":
             f.update(status="NEW", first_seen=now)                # first time, or came back
-        elif old["status"] == "IGNORED":
-            f.update(status="IGNORED", first_seen=old.get("first_seen", now),
-                     ignore_reason=old.get("ignore_reason"))      # stays ignored
         else:
-            f.update(status="OPEN", first_seen=old.get("first_seen", now))   # still there
+            # Still there. This also covers "was IGNORED": every check skips resources
+            # tagged watchdog-ignore=true, so finding one again means someone removed
+            # the tag. That is how you stop ignoring: it becomes OPEN again.
+            f.update(status="OPEN", first_seen=old.get("first_seen", now))
         result[f["finding_id"]] = f
 
     for finding_id, old in previous.items():
@@ -474,13 +474,13 @@ def email_new(findings, summary):
     new = [f for f in findings if f["status"] == "NEW"]
     if not new:
         return
-    body = (f"Cloud Watchdog found {len(new)} new issue(s):\n\n"
+    body = (f"Cloud Watchdog found {len(new)} new finding(s):\n\n"
             + "\n".join(_line(f) for f in new)
             + f"\n\nGrade: {summary['grade']} ({summary['score']}/100). "
               f"About ${summary['wasted_usd']:.2f}/month wasted.\n"
               "Open the dashboard to Fix, Delete or Ignore them.")
     boto3.client("sns").publish(TopicArn=SNS_TOPIC_ARN,
-                                Subject=f"Cloud Watchdog: {len(new)} new issue(s)",
+                                Subject=f"Cloud Watchdog: {len(new)} new finding(s)",
                                 Message=body)
 
 
@@ -495,10 +495,10 @@ def email_reminder(findings):
                        .replace(tzinfo=timezone.utc) <= cutoff]
     if not old:
         return
-    body = (f"Weekly reminder: {len(old)} issue(s) have been open for {REMINDER_DAYS}+ days:\n\n"
+    body = (f"Weekly reminder: {len(old)} finding(s) have been open for {REMINDER_DAYS}+ days:\n\n"
             + "\n".join(_line(f) for f in old))
     boto3.client("sns").publish(TopicArn=SNS_TOPIC_ARN,
-                                Subject=f"Cloud Watchdog: {len(old)} issue(s) still open",
+                                Subject=f"Cloud Watchdog: {len(old)} finding(s) still open",
                                 Message=body)
 
 

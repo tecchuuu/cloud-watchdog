@@ -73,4 +73,6 @@ Backup if a fix fails: `bash scripts/clean-mess.sh`. Backup if AWS is down: the 
 | Why serverless? | Nothing to patch or keep running, scales by itself, close to $0 when idle. The cost: more pieces to connect. |
 | Why Fix and Delete? | Fix removes the risk but keeps the resource (reversible); Delete removes it for good. |
 | Is the token stored safely? | sessionStorage (gone when the tab closes), 60-minute ID token, refresh token revoked on logout, PKCE instead of a client secret. |
+| How do you undo an Ignore? | Remove the `watchdog-ignore` tag from the resource in the console; the next scan shows it as OPEN again. A button for it is future work. |
+| Why does the dashboard look so plain? | It's a work tool: colour is only used for meaning (risk, good, clickable), every action has a preview, and text contrast was measured. See `docs/dashboard-design.md`. |
 | Why does the idle EC2 need a day? | Idle = low CPU over hours of CloudWatch data; a just-launched instance has no history yet. |

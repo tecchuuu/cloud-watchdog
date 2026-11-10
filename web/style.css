@@ -2,7 +2,9 @@
    Every colour is a variable. A theme is just a different set of values:
    light (default) below, dark under [data-theme="dark"].
    Colour only means something: red/amber/grey = risk, green = good,
-   accent = clickable. Everything else is neutral. */
+   accent = clickable. Everything else is neutral.
+   All text colours were measured: at least 4.5:1 contrast against their
+   background in both themes (the WCAG AA level for small text). */
 
 :root {
   --page: #f2f4f7;        /* behind everything */
@@ -10,15 +12,22 @@
   --panel: #f6f7f9;       /* small fills inside a card */
   --line: #e3e6ea;
   --text: #1d2125;
-  --muted: #6b7280;
+  --muted: #5f6775;
   --accent: #0972d3;      /* buttons, links */
   --on-accent: #ffffff;   /* text on an accent button */
   --high: #d91515;
   --medium: #c96a00;
-  --low: #6b7280;
+  --low: #5f6775;
   --good: #037f0c;
+  --grade-b: #4d7c0f;
+  --grade-c: #a16207;
+  --danger-bg: #d91515;   /* filled red: confirm Delete button, error message */
+  --on-danger: #ffffff;
+  --ink: #000000;         /* mixed into badge text to make it darker (lighter in dark mode) */
   --header: #232f3e;      /* navy header in both themes */
   --brand: #ff9900;       /* logo */
+  --shadow: 0 1px 3px rgba(16, 24, 40, .08);   /* lifts white cards off the grey page */
+  --row-hover: color-mix(in srgb, var(--panel) 70%, var(--surface));
   --radius: 8px;
   color-scheme: light;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -39,7 +48,13 @@
   --medium: #f5b13d;
   --low: #94a3b8;
   --good: #4cc76a;
+  --grade-b: #84cc16;
+  --grade-c: #eab308;
+  --danger-bg: #ff6b6b;
+  --on-danger: #16191f;   /* white on this lighter red was too faint (2.8:1) */
+  --ink: #ffffff;
   --header: #0b1520;
+  --shadow: none;
   color-scheme: dark;
 }
 
@@ -54,14 +69,27 @@ code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .mono { font-family: ui-monospace, Consolas, monospace; }
+.nowrap { white-space: nowrap; }
 .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .empty { text-align: center; padding: 40px; color: var(--muted); }
 .ok { color: var(--good); font-weight: 600; }
 .bad { color: var(--high); font-weight: 600; }
 .warn { color: var(--high); font-weight: 600; }
+.hint { margin: -4px 0 10px; }
 
-/* A white (or navy) card with a thin border: groups things so the page isn't one flat sheet */
-.box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+/* For screen readers only: there, but not visible */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Keyboard users see clearly which button or box they are on */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.topbar :focus-visible { outline-color: #fff; }
+
+/* A card with a thin border and a soft shadow: groups things so the page isn't one flat sheet */
+.box, .findings-main, .summary, .card, .chart {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow);
+}
+.box { overflow-x: auto; }   /* a wide table scrolls inside its card, not the whole page */
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -87,18 +115,18 @@ button {
 button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
-button.danger { color: var(--high); border-color: color-mix(in srgb, var(--high) 35%, transparent); }
-dialog button.danger { background: var(--high); border-color: var(--high); color: #fff; }
+/* Delete in a row is quiet (red words only), so red on the page still means "high risk".
+   The loud filled red is kept for the confirm popup, where the decision is made. */
+button.danger { color: var(--high); }
+button.danger:hover:not(:disabled) { border-color: var(--high); }
+dialog button.danger { background: var(--danger-bg); border-color: var(--danger-bg); color: var(--on-danger); font-weight: 600; }
 button.link { border: none; background: none; color: var(--accent); padding: 0; }
 
 /* ---------- findings: table card on the left, summary card on the right ---------- */
 .findings-layout { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 20px; align-items: start; }
-.findings-main { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.table-scroll { overflow-x: auto; }   /* narrow screens: the table scrolls sideways in here */
 .page-title { font-size: 20px; margin: 0; }
-.summary {
-  position: sticky; top: 16px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
-}
+.summary { position: sticky; top: 16px; }
 .summary-grade { padding-bottom: 14px; }
 .summary-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
 .grade-row { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 8px; }
@@ -113,24 +141,52 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
 .summary dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .summary dd.good { color: var(--good); }
 .summary p { margin: 0; }
+.stale { color: var(--high); font-weight: 600; }
+.summary .stale-note { color: var(--high); padding-bottom: 12px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
 .dot-HIGH { background: var(--high); }
 .dot-MEDIUM { background: var(--medium); }
 .dot-LOW { background: var(--low); }
 
-/* Narrow screens: summary box above the table */
+/* Narrow screens: summary box above the table, header wraps */
 @media (max-width: 900px) {
   .findings-layout { grid-template-columns: minmax(0, 1fr); }
   .summary { position: static; order: -1; }
   .topbar { flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; }
 }
-/* A wide table scrolls inside its card instead of pushing the whole page sideways */
-.findings-main, .box { overflow-x: auto; }
+
+/* ---------- tables ---------- */
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar > div { display: flex; align-items: center; gap: 10px; }
+.buttons { flex-wrap: wrap; }
+
+.grid { width: 100%; border-collapse: separate; border-spacing: 0; }
+.grid th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+.grid td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.grid tr:last-child td { border-bottom: none; }
+.grid tbody tr:hover td { background: var(--row-hover); }
+.grid .num { text-align: right; white-space: nowrap; }
+
+/* Fix / Delete / Ignore stay pinned to the right edge while the rest of the row
+   scrolls under them, so they are always reachable on a narrow screen. */
+.grid .row-actions { position: sticky; right: 0; background: var(--surface); white-space: nowrap; }
+.row-actions button { padding: 3px 8px; font-size: 13px; }
+.can-scroll .row-actions { box-shadow: -10px 0 8px -8px rgba(0, 0, 0, .2); }   /* "there is more underneath" */
+@media (max-width: 600px) {
+  .grid .row-actions { white-space: normal; }
+  .row-actions button { display: block; width: 100%; margin-bottom: 4px; }
+}
 
 /* Risk colour on the left edge of each row */
 .grid tr[class^="row-"] td:first-child { border-left: 4px solid transparent; }
 .grid tr.row-HIGH td:first-child { border-left-color: var(--high); }
 .grid tr.row-MEDIUM td:first-child { border-left-color: var(--medium); }
+
+/* Ignored rows step back: grey words and no risk colour, but still easy to read
+   (fading them with opacity made the text too faint) */
+.grid tr.ignored td { color: var(--muted); }
+.grid tr.ignored td:first-child { border-left-color: transparent; }
+tr.ignored .sev { background: var(--panel); color: var(--muted); }
 
 /* Cost / Security tag: neutral with text, not another colour */
 .cat {
@@ -138,80 +194,62 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
   background: var(--panel); color: var(--muted); border-radius: 4px; vertical-align: 1px;
 }
 
-/* ---------- findings table ---------- */
-.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.toolbar > div { display: flex; align-items: center; gap: 10px; }
-.buttons { flex-wrap: wrap; }
-.stale { color: var(--high); font-weight: 600; }
-
-.grade-badge {
-  display: inline-grid; place-items: center; width: 34px; height: 34px;
-  border-radius: 50%; font-weight: 700; color: #fff; background: var(--muted);
+/* Badges: a light tint of the meaning colour behind, a darker shade of it for the words */
+.sev, .status, .result {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; white-space: nowrap;
 }
+.sev-HIGH, .result-FAILED {
+  background: color-mix(in srgb, var(--high) 15%, transparent); color: color-mix(in srgb, var(--high) 75%, var(--ink));
+}
+.sev-MEDIUM {
+  background: color-mix(in srgb, var(--medium) 15%, transparent); color: color-mix(in srgb, var(--medium) 75%, var(--ink));
+}
+.status-NEW {
+  background: color-mix(in srgb, var(--accent) 15%, transparent); color: color-mix(in srgb, var(--accent) 75%, var(--ink));
+}
+.result-OK {
+  background: color-mix(in srgb, var(--good) 15%, transparent); color: color-mix(in srgb, var(--good) 75%, var(--ink));
+}
+.sev-LOW, .result-ALREADY_FIXED, .status-IGNORED { background: var(--panel); color: var(--muted); }
+.status-OPEN { background: var(--panel); color: var(--text); }
+
+/* Grade colours (letter, score bar, history bars) */
 .grade-A, .grade-bg-A { background: var(--good); }
-.grade-B, .grade-bg-B { background: #65a30d; }
-.grade-C, .grade-bg-C { background: #ca8a04; }
+.grade-B, .grade-bg-B { background: var(--grade-b); }
+.grade-C, .grade-bg-C { background: var(--grade-c); }
 .grade-D, .grade-bg-D { background: var(--medium); }
 .grade-F, .grade-bg-F { background: var(--high); }
 .grade-text-A { color: var(--good); }
-.grade-text-B { color: #65a30d; }
-.grade-text-C { color: #ca8a04; }
+.grade-text-B { color: var(--grade-b); }
+.grade-text-C { color: var(--grade-c); }
 .grade-text-D { color: var(--medium); }
 .grade-text-F { color: var(--high); }
 
-.grid { width: 100%; border-collapse: collapse; }
-.grid th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
-.grid td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.grid tr:last-child td { border-bottom: none; }
-.grid tbody tr:hover td { background: color-mix(in srgb, var(--panel) 70%, transparent); }
-.grid .num { text-align: right; white-space: nowrap; }
-.row-actions { white-space: nowrap; }
-.row-actions button { padding: 3px 8px; font-size: 13px; }
-tr.ignored { opacity: .55; }
-
-/* Badges: a light tint of the meaning colour, so they work on white and on navy */
-.sev, .status, .result {
-  display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px;
-}
-.sev-HIGH, .result-FAILED { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
-.sev-MEDIUM { background: color-mix(in srgb, var(--medium) 15%, transparent); color: var(--medium); }
-.sev-LOW, .result-ALREADY_FIXED, .status-IGNORED { background: var(--panel); color: var(--muted); }
-.status-NEW { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.status-OPEN { background: var(--panel); color: var(--text); }
-.result-OK { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
-
-/* CIS label with a tooltip on hover */
+/* CIS label: hover, Tab to it, or tap it to read the rule */
 .chip {
   display: inline-block; font-size: 11px; padding: 1px 6px; margin-left: 4px;
   border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; cursor: help;
 }
 
-/* Tooltips: any element with data-tip="..." */
-[data-tip] { position: relative; }
-[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
-  width: max-content; max-width: 300px; padding: 8px 10px; z-index: 10;
-  background: var(--text); color: var(--surface); font-size: 12px; font-weight: 400; line-height: 1.4;
-  border-radius: 6px; white-space: normal; pointer-events: none;
+/* The one tooltip on the page; app.js puts it next to whatever has data-tip="..." */
+.tip {
+  position: fixed; z-index: 1000; width: max-content; max-width: min(300px, calc(100vw - 16px));
+  padding: 8px 10px; border-radius: 6px; pointer-events: none;
+  background: var(--text); color: var(--surface); font-size: 12px; line-height: 1.4;
 }
 
 /* ---------- report ---------- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
 .card-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
 .card-big { font-size: 36px; font-weight: 700; margin: 4px 0; }
 .card-big.good { color: var(--good); }
 
-.chart {
-  display: flex; align-items: flex-end; gap: 6px; height: 140px;
-  padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-}
+.chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding: 12px; }
 .bar-wrap { flex: 1; max-width: 40px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 .bar { width: 100%; border-radius: 4px 4px 0 0; }
 .bar-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-/* ---------- loading: top bar, spinner, busy buttons ---------- */
+/* ---------- loading and errors ---------- */
 .loading-bar {
   position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 100; overflow: hidden;
   background: color-mix(in srgb, var(--accent) 25%, transparent);
@@ -234,15 +272,24 @@ button.is-busy::before {
   border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
   animation: spin .7s linear infinite;
 }
-.loading-row { text-align: center; padding: 40px; color: var(--muted); }
+.grid td.loading-row { text-align: center; padding: 40px; color: var(--muted); }
+.grid td.load-error { text-align: center; padding: 32px 16px; }
+.load-error div { color: var(--muted); margin: 6px auto 14px; max-width: 520px; }
 
-/* ---------- popup + toast ---------- */
+/* People who turned off animations in their system settings get a calmer page */
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill { transition: none; }
+  .loading-bar::after { animation-duration: 3s; }
+}
+
+/* ---------- popup + messages ---------- */
 dialog {
   border: 1px solid var(--line); border-radius: 12px; padding: 24px; width: min(560px, 92vw);
   background: var(--surface); color: var(--text); box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
 }
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 dialog h3 { margin-top: 0; }
+dialog label { display: block; font-weight: 600; margin-bottom: 6px; }
 dialog textarea {
   width: 100%; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--page); color: var(--text);
@@ -252,7 +299,10 @@ dialog textarea {
 .popup-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 .toast {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200;
+  display: flex; align-items: center; gap: 12px; max-width: min(640px, calc(100vw - 32px));
   background: var(--text); color: var(--surface); padding: 10px 16px; border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
 }
-.toast.error { background: var(--high); color: #fff; }
+.toast.error { background: var(--danger-bg); color: var(--on-danger); }
+.toast-close { border: none; background: none; color: inherit; font-size: 20px; line-height: 1; padding: 0 2px; }

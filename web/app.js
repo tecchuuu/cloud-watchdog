@@ -14,44 +14,103 @@ const CIS_TIPS = {
   "CIS 2.1.4": "CIS AWS Foundations 2.1.4: S3 buckets should have Block Public Access turned on so files can't leak to the internet.",
 };
 
+// What each button does, shown when the mouse rests on it
+const ACTION_HINTS = {
+  FIX: "Fix: remove the risk but keep the resource. You see a preview first.",
+  DELETE: "Delete: remove the resource for good. You are asked to confirm.",
+  IGNORE: "Ignore: mark this as OK, with a reason. Future scans skip it.",
+};
+
 let findings = [];   // what GET /findings returned last
 let lastReport = null;
 
 // ------------------------------------------------------------------ helpers
 
-// Text from AWS (resource names, tags) is put on the page as text, never as
-// HTML, so a resource named "<script>..." can't run code in the dashboard.
+// Text from AWS (resource names, tags) is always escaped before it goes on
+// the page, so a resource named "<script>..." can't run code in the dashboard.
+// Quotes are escaped too, so the text is also safe inside title="..." etc.
 function esc(value) {
-  const div = document.createElement("div");
-  div.textContent = value ?? "";
-  return div.innerHTML;
+  return String(value ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function money(usd) {
   return usd ? `$${Number(usd).toFixed(2)}` : "–";
 }
 
+// "5 min", "3 h", "4 days": how long since a time
+function duration(iso) {
+  const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h`;
+  return `${Math.round(hours / 24)} days`;
+}
+
 function timeAgo(iso) {
   if (!iso) return "never";
-  const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} days ago`;
+  const d = duration(iso);
+  return d === "under a minute" ? "just now" : `${d} ago`;
 }
 
 function localTime(iso) {
   return iso ? new Date(iso).toLocaleString() : "";
 }
 
+// "sg-0abc · us-east-1" as safe HTML. The AWS ID tells two same-named resources
+// apart, and it's what you search for in the AWS console. (A bucket's ID is its
+// name, so it isn't repeated.) The ID never breaks in the middle of a line.
+function idAndRegion(f) {
+  if (!f) return "";
+  const id = f.resource_id && f.resource_id !== f.resource_name
+    ? `<span class="nowrap">${esc(f.resource_id)}</span> · ` : "";
+  return id + esc(f.region);
+}
+
+// Browser errors like "Failed to fetch" mean nothing to most people: say what to check.
+function friendly(error) {
+  if (error instanceof TypeError && /fetch|network|load failed/i.test(error.message)) {
+    return "Can't reach the Watchdog API. Check your internet connection. " +
+           "On a new install, check the CORS origin in API Gateway (README step 9).";
+  }
+  return error.message;
+}
+
+// Message at the bottom of the page. Good news goes away by itself;
+// an error stays until you close it, so it can't be missed.
 function toast(message, isError = false) {
   const t = $("toast");
   t.textContent = message;
   t.className = isError ? "toast error" : "toast";
+  t.setAttribute("role", isError ? "alert" : "status"); // read out by screen readers
+  if (isError) {
+    const close = document.createElement("button");
+    close.className = "toast-close";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Close message");
+    close.onclick = () => (t.hidden = true);
+    t.append(close);
+  }
   t.hidden = false;
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (t.hidden = true), 5000);
+  if (!isError) toast.timer = setTimeout(() => (t.hidden = true), 5000);
+}
+
+// A failed load must not leave "Loading…" on screen forever: say what went
+// wrong, in the table itself, with a button to try again.
+function showLoadError(tbodyId, columns, what, error, retry) {
+  const body = $(tbodyId);
+  body.innerHTML = `
+    <tr><td colspan="${columns}" class="load-error">
+      <b>Couldn't load the ${what}.</b>
+      <div>${esc(friendly(error))}</div>
+      <button class="retry">Try again</button>
+    </td></tr>`;
+  body.querySelector(".retry").onclick = () => {
+    body.innerHTML = `<tr><td colspan="${columns}" class="loading-row"><span class="spinner"></span> Loading…</td></tr>`;
+    retry();
+  };
 }
 
 // ---------------------------------------------------------------- the API
@@ -95,34 +154,52 @@ async function apiCall(method, path, body) {
 // ------------------------------------------------------------- findings view
 
 async function loadFindings() {
-  const [f, r] = await Promise.all([api("GET", "/findings"), api("GET", "/report")]);
+  let f, r;
+  try {
+    [f, r] = await Promise.all([api("GET", "/findings"), api("GET", "/report")]);
+  } catch (e) {
+    findings = [];
+    showLoadError("findings-body", 7, "findings", e, loadFindings);
+    $("findings-count").textContent = "";
+    $("findings-empty").hidden = true;
+    updateBulkButtons();
+    return;
+  }
+  if (!f || !r) return; // on the way to the login page
+
   findings = f.findings.sort((a, b) =>
     (a.status === "IGNORED") - (b.status === "IGNORED") ||           // ignored at the bottom
     SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||       // then by risk
     (b.est_monthly_usd || 0) - (a.est_monthly_usd || 0));            // then by cost
   lastReport = r;
   renderFindings();
-  renderHeader();
+  renderSummary();
 }
 
-function renderHeader() {
+// The summary box beside the table
+function renderSummary() {
   const s = lastReport.summary;
-  const badge = $("grade-badge");
-  badge.textContent = s.grade || "–";
-  badge.className = `grade-letter grade-text-${s.grade || "none"}`;
+  const letter = $("grade-letter");
+  letter.textContent = s.grade || "–";
+  letter.className = `grade-letter grade-text-${s.grade || "none"}`;
 
   $("s-score").textContent = s.score != null ? `${s.score} / 100` : "";
   $("s-meter").style.width = `${s.score ?? 0}%`;
   $("s-meter").className = `meter-fill grade-bg-${s.grade || "none"}`;
 
+  // Last scan: a warning sign and a sentence when it's too old, not only red text
+  const never = !lastReport.last_scan;
+  const stale = never || Date.now() - new Date(lastReport.last_scan) > STALE_HOURS * 3600 * 1000;
   const lastScan = $("last-scan");
-  lastScan.textContent = timeAgo(lastReport.last_scan);
+  lastScan.textContent = (stale && !never ? "⚠ " : "") + timeAgo(lastReport.last_scan);
   lastScan.title = localTime(lastReport.last_scan);
-  const stale = !lastReport.last_scan ||
-    Date.now() - new Date(lastReport.last_scan) > STALE_HOURS * 3600 * 1000;
   lastScan.className = stale ? "stale" : "";
+  $("stale-note").hidden = !stale;
+  $("stale-note").textContent = never
+    ? "No scan yet. Press Scan now."
+    : `No scan for over ${STALE_HOURS} hours. The daily scan may be failing: press Scan now.`;
 
-  // Summary box: the same numbers the Report tab shows
+  // The same numbers the Report tab shows
   $("s-high").textContent = s.counts.HIGH;
   $("s-medium").textContent = s.counts.MEDIUM;
   $("s-low").textContent = s.counts.LOW;
@@ -133,20 +210,25 @@ function renderHeader() {
 function renderFindings() {
   $("findings-body").innerHTML = findings.map((f) => {
     const ignored = f.status === "IGNORED";
-    const cis = f.cis
-      ? ` <span class="chip" data-tip="${esc(CIS_TIPS[f.cis] || f.cis)}">${esc(f.cis)}</span>` : "";
-    const note = ignored ? `<div class="muted small">Ignored: ${esc(f.ignore_reason)}</div>` : "";
-    const actions = ignored ? "" : `
-        <button data-act="FIX" data-id="${esc(f.finding_id)}">Fix</button>
-        <button data-act="DELETE" data-id="${esc(f.finding_id)}" class="danger">Delete</button>
-        <button data-act="IGNORE" data-id="${esc(f.finding_id)}">Ignore</button>`;
     const category = f.category === "cost" ? "Cost" : "Security";
+    // tabindex makes the CIS label reachable with the Tab key and a tap, not only a mouse
+    const cis = f.cis
+      ? ` <span class="chip" tabindex="0" role="note" aria-label="${esc(CIS_TIPS[f.cis] || f.cis)}"
+                data-tip="${esc(CIS_TIPS[f.cis] || f.cis)}">${esc(f.cis)}</span>` : "";
+    const note = ignored ? `<div class="small">Ignored: ${esc(f.ignore_reason)}</div>` : "";
+    // How long it has been a problem: old ones first is a fair way to pick what to do
+    const age = !ignored && f.first_seen
+      ? `<div class="muted small" title="First seen ${esc(localTime(f.first_seen))}">for ${duration(f.first_seen)}</div>` : "";
+    const actions = ignored ? "" : ["FIX", "DELETE", "IGNORE"].map((act) => `
+        <button data-act="${act}" data-id="${esc(f.finding_id)}" title="${ACTION_HINTS[act]}"
+                ${act === "DELETE" ? 'class="danger"' : ""}>${act[0] + act.slice(1).toLowerCase()}</button>`).join("");
     return `
       <tr class="row-${esc(f.severity)} ${ignored ? "ignored" : ""}">
-        <td><input type="checkbox" class="pick" value="${esc(f.finding_id)}" ${ignored ? "disabled" : ""}></td>
+        <td><input type="checkbox" class="pick" value="${esc(f.finding_id)}"
+                   aria-label="Select ${esc(f.resource_name)}" ${ignored ? "disabled" : ""}></td>
         <td><span class="sev sev-${esc(f.severity)}">${esc(f.severity)}</span></td>
-        <td><span class="status status-${esc(f.status)}">${esc(f.status)}</span></td>
-        <td>${esc(f.resource_name)}<div class="muted small">${esc(f.region)}</div></td>
+        <td><span class="status status-${esc(f.status)}">${esc(f.status)}</span>${age}</td>
+        <td>${esc(f.resource_name)}<div class="muted small">${idAndRegion(f)}</div></td>
         <td><span class="cat">${category}</span> ${esc(f.detail)}${cis}${note}</td>
         <td class="num">${money(f.est_monthly_usd)}</td>
         <td class="row-actions">${actions}</td>
@@ -157,27 +239,40 @@ function renderFindings() {
   $("findings-empty").hidden = active > 0;
   $("select-all").checked = false;
   updateBulkButtons();
+  markScrollable();
 }
 
 function selectedIds() {
   return [...document.querySelectorAll(".pick:checked")].map((c) => c.value);
 }
 
+// The bulk buttons say how many rows they will act on
 function updateBulkButtons() {
   const n = selectedIds().length;
   $("fix-selected").disabled = n === 0;
   $("delete-selected").disabled = n === 0;
+  $("fix-selected").textContent = n ? `Fix selected (${n})` : "Fix selected";
+  $("delete-selected").textContent = n ? `Delete selected (${n})` : "Delete selected";
   $("fix-all").disabled = !findings.some((f) => f.status !== "IGNORED");
+}
+
+// On a narrow screen the table scrolls sideways inside its card, with the action
+// buttons pinned to the right. A soft shadow beside them shows there is more underneath.
+function markScrollable() {
+  const box = document.querySelector(".table-scroll");
+  box.classList.toggle("can-scroll", box.scrollWidth > box.clientWidth);
 }
 
 // ------------------------------------------------------------------- popup
 
-// Show the popup; resolves true if Confirm was pressed.
+// Show the popup; resolves true if the OK button was pressed.
+// Focus starts on Cancel, so pressing Enter by accident never confirms.
 function popup(title, html, { okText = "Confirm", danger = false, showCancel = true } = {}) {
   $("popup-title").textContent = title;
   $("popup-body").innerHTML = html;
   $("popup-ok").textContent = okText;
   $("popup-ok").className = danger ? "danger" : "primary";
+  $("popup-ok").disabled = false;
   $("popup-cancel").hidden = !showCancel;
   $("popup-buttons").hidden = false;
   if (!$("popup").open) $("popup").showModal();
@@ -224,10 +319,19 @@ function busy(button, text, countSeconds = false) {
 
 // ----------------------------------------------------------------- actions
 
+// One line in a popup list: name, ID and region, then what happens / happened
+function popupLine(findingId, fallbackName, badge, text) {
+  const f = findings.find((x) => x.finding_id === findingId);
+  return `<li>${badge}<b>${esc(f ? f.resource_name : fallbackName || findingId)}</b>
+          <span class="muted small">${idAndRegion(f)}</span><br>${esc(text)}</li>`;
+}
+
 // Fix or Delete: preview first (changes nothing), confirm, then do it.
 async function fixOrDelete(action, ids) {
   if (!ids.length) return;
   const verb = action === "FIX" ? "Fix" : "Delete";
+  const many = `${ids.length} finding${ids.length > 1 ? "s" : ""}`;
+
   working(`${verb}: checking what will change…`);
   let preview;
   try {
@@ -235,18 +339,14 @@ async function fixOrDelete(action, ids) {
   } finally {
     closeWorking();
   }
-  const rows = preview.map((p) =>
-    `<li><b>${esc(p.resource_name || p.finding_id)}</b> <span class="muted">${esc(p.region || "")}</span><br>${esc(p.will)}</li>`
-  ).join("");
+  const rows = preview.map((p) => popupLine(p.finding_id, p.resource_name, "", p.will)).join("");
   const warning = action === "DELETE"
     ? `<p class="warn">Delete can't be undone. The resource is gone for good.</p>` : "";
-  const ok = await popup(
-    `${action === "FIX" ? "Fix" : "Delete"} ${ids.length} finding${ids.length > 1 ? "s" : ""}?`,
-    `${warning}<ul class="preview">${rows}</ul>`,
-    { okText: action === "FIX" ? "Fix" : "Delete", danger: action === "DELETE" });
+  const ok = await popup(`${verb} ${many}?`, `${warning}<ul class="preview">${rows}</ul>`,
+    { okText: verb, danger: action === "DELETE" });
   if (!ok) return;
 
-  working(`${action === "FIX" ? "Fixing" : "Deleting"} ${ids.length} finding${ids.length > 1 ? "s" : ""}…`);
+  working(`${action === "FIX" ? "Fixing" : "Deleting"} ${many}…`);
   try {
     const { results } = await api("POST", action === "FIX" ? "/fix" : "/delete", { finding_ids: ids });
     await showResults(results);
@@ -257,14 +357,22 @@ async function fixOrDelete(action, ids) {
 
 async function ignore(id) {
   const f = findings.find((x) => x.finding_id === id);
-  const ok = await popup(`Ignore ${f.resource_name}?`, `
+  const answer = popup(`Ignore ${f.resource_name}?`, `
     <p>Watchdog tags it <code>watchdog-ignore=true</code> and future scans skip it.
        The reason goes into the audit log.</p>
-    <textarea id="ignore-reason" rows="3" placeholder="Why is this OK? (required)"></textarea>`,
+    <label for="ignore-reason">Why is this OK? (required)</label>
+    <textarea id="ignore-reason" rows="3" maxlength="300"></textarea>`,
     { okText: "Ignore" });
-  if (!ok) return;
-  const reason = $("ignore-reason").value.trim();
-  if (!reason) return toast("Ignore needs a reason", true);
+
+  // The Ignore button stays off until a reason is typed, so the popup
+  // can't be sent empty and thrown away.
+  const reasonBox = $("ignore-reason");
+  $("popup-ok").disabled = true;
+  reasonBox.oninput = () => ($("popup-ok").disabled = !reasonBox.value.trim());
+  reasonBox.focus();
+  if (!(await answer)) return;
+
+  const reason = reasonBox.value.trim();
   working(`Ignoring ${f.resource_name}…`);
   try {
     const { results } = await api("POST", "/ignore", { finding_id: id, reason });
@@ -274,14 +382,22 @@ async function ignore(id) {
   }
 }
 
+// The title says what really happened ("3 done, 1 failed"), and failures come first.
 async function showResults(results) {
-  const rows = results.map((r) => {
-    const name = findings.find((f) => f.finding_id === r.finding_id)?.resource_name || r.finding_id;
-    return `<li><span class="result result-${esc(r.result)}">${esc(r.result)}</span>
-            <b>${esc(name)}</b> <span class="muted">log #${esc(r.log_seq)}</span><br>
-            ${esc(r.done || r.error || (r.result === "ALREADY_FIXED" ? "Nothing to do: already fixed or gone" : ""))}</li>`;
+  const count = (result) => results.filter((r) => r.result === result).length;
+  const title = [
+    count("OK") && `${count("OK")} done`,
+    count("ALREADY_FIXED") && `${count("ALREADY_FIXED")} already fixed`,
+    count("FAILED") && `${count("FAILED")} failed`,
+  ].filter(Boolean).join(", ");
+
+  const order = { FAILED: 0, OK: 1, ALREADY_FIXED: 2 };
+  const rows = [...results].sort((a, b) => order[a.result] - order[b.result]).map((r) => {
+    const badge = `<span class="result result-${esc(r.result)}">${esc(r.result.replace("_", " "))}</span> `;
+    const text = r.done || r.error || (r.result === "ALREADY_FIXED" ? "Nothing to do: already fixed or gone" : "");
+    return popupLine(r.finding_id, null, badge, `${text} (log #${r.log_seq})`);
   }).join("");
-  await popup("Done", `<ul class="preview">${rows}</ul>`, { okText: "OK", showCancel: false });
+  await popup(title || "Done", `<ul class="preview">${rows}</ul>`, { okText: "OK", showCancel: false });
   await loadFindings();
 }
 
@@ -289,12 +405,13 @@ async function scanNow() {
   const done = busy($("scan-now"), "Scanning…", true); // ~10-25 s, so count the seconds
   try {
     const s = await api("POST", "/scan");
+    if (!s) return;
     toast(`Scan done: grade ${s.grade}, ${s.new} new, ${s.open} still open`);
     await loadFindings();
     if (!$("view-report").hidden) await loadReport();
   } catch (e) {
     // API Gateway gives up after 30 s; the scan itself keeps running in Lambda
-    toast(`Scan: ${e.message}. If it timed out, refresh in a minute.`, true);
+    toast(`Scan problem: ${friendly(e)} If it only timed out, it is still running: refresh in a minute.`, true);
   } finally {
     done();
   }
@@ -306,7 +423,13 @@ async function loadReport() {
   if (!lastReport) {
     $("log-body").innerHTML = `<tr><td colspan="8" class="loading-row"><span class="spinner"></span> Loading report…</td></tr>`;
   }
-  const r = await api("GET", "/report");
+  let r;
+  try {
+    r = await api("GET", "/report");
+  } catch (e) {
+    return showLoadError("log-body", 8, "report", e, loadReport);
+  }
+  if (!r) return; // on the way to the login page
   lastReport = r;
   const s = r.summary;
 
@@ -315,14 +438,15 @@ async function loadReport() {
   $("r-score").textContent = s.score != null ? `score ${s.score} / 100` : "";
   $("r-open").textContent = s.new + s.open;
   $("r-counts").textContent = `${s.counts.HIGH} high · ${s.counts.MEDIUM} medium · ${s.counts.LOW} low`;
-  $("r-wasted").textContent = money(s.wasted_usd) === "–" ? "$0.00" : money(s.wasted_usd);
-  $("r-saved").textContent = money(s.saved_usd) === "–" ? "$0.00" : money(s.saved_usd);
+  $("r-wasted").textContent = `$${Number(s.wasted_usd || 0).toFixed(2)}`;
+  $("r-saved").textContent = `$${Number(s.saved_usd || 0).toFixed(2)}`;
   $("r-fixed").textContent = `per month, ${s.fixed_total} fixed`;
 
   // History: one bar per scan, height = score
   $("history-chart").innerHTML = r.history.length ? r.history.map((h) => {
     const total = h.counts.HIGH + h.counts.MEDIUM + h.counts.LOW;
-    return `<div class="bar-wrap" data-tip="${esc(localTime(h.scanned_at))}: grade ${esc(h.grade)} (${h.score}), ${total} open">
+    const tip = `${localTime(h.scanned_at)}: grade ${h.grade} (${h.score}), ${total} open`;
+    return `<div class="bar-wrap" role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">
               <div class="bar grade-bg-${esc(h.grade)}" style="height:${Math.max(h.score, 3)}%"></div>
               <div class="bar-label">${esc(h.grade)}</div>
             </div>`;
@@ -334,14 +458,14 @@ async function loadReport() {
       <td title="${esc(e.ts)}">${esc(localTime(e.ts))}</td>
       <td><b>${esc(e.user)}</b></td>
       <td>${esc(e.action)}</td>
-      <td><span class="result result-${esc(e.result)}">${esc(e.result)}</span></td>
+      <td><span class="result result-${esc(e.result)}">${esc(String(e.result).replace("_", " "))}</span></td>
       <td class="small">${esc(e.finding_id)}</td>
       <td class="small">${esc(e.reason || e.error || "")}</td>
       <td class="mono small" title="${esc(e.hash)}">${esc((e.hash || "").slice(0, 10))}…</td>
     </tr>`).join("") || `<tr><td colspan="8" class="muted">Nothing done yet.</td></tr>`;
 
   $("ignored-body").innerHTML = r.ignored.map((f) => `
-    <tr><td>${esc(f.resource_name)}<div class="muted small">${esc(f.region)}</div></td>
+    <tr><td>${esc(f.resource_name)}<div class="muted small">${idAndRegion(f)}</div></td>
         <td>${esc(f.detail)}</td><td>${esc(f.ignore_reason)}</td></tr>`).join("")
     || `<tr><td colspan="3" class="muted">Nothing ignored.</td></tr>`;
 }
@@ -350,8 +474,9 @@ async function verifyLog() {
   const done = busy($("verify-log"), "Checking…");
   try {
     const v = await api("GET", "/verify-log");
+    if (!v) return;
     $("verify-result").innerHTML = v.ok
-      ? `<span class="ok">✔ Intact: all ${v.entries} entries check out</span>`
+      ? `<span class="ok">✔ Intact: all ${esc(v.entries)} entries check out</span>`
       : `<span class="bad">✘ Broken at entry #${esc(v.broken_at)}: it was changed or removed</span>`;
   } finally {
     done();
@@ -377,7 +502,8 @@ async function csvFindings() {
     "first_seen", "last_seen", "fixed_at", "ignore_reason"]);
 }
 
-function csvLog() {
+async function csvLog() {
+  if (!lastReport) return;
   downloadCsv("watchdog-audit-log.csv", [...lastReport.audit_log].reverse(),
     ["seq", "ts", "user", "action", "finding_id", "result", "reason", "error", "prev_hash", "hash"]);
 }
@@ -385,14 +511,18 @@ function csvLog() {
 // ------------------------------------------------------------------- wiring
 
 function showView(name) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
+  document.querySelectorAll(".tab").forEach((t) => {
+    const active = t.dataset.view === name;
+    t.classList.toggle("active", active);
+    if (active) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+  });
   $("view-findings").hidden = name !== "findings";
   $("view-report").hidden = name !== "report";
-  (name === "report" ? loadReport() : loadFindings()).catch((e) => toast(e.message, true));
+  (name === "report" ? loadReport() : loadFindings()).catch((e) => toast(friendly(e), true));
 }
 
-// Run fn, show any error as a red message instead of failing silently
-const safe = (fn) => (...args) => fn(...args).catch((e) => toast(e.message, true));
+// Run fn; if it fails, show the reason as a red message instead of failing silently
+const safe = (fn) => (...args) => fn(...args).catch((e) => toast(friendly(e), true));
 
 function wireUp() {
   document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => showView(t.dataset.view)));
@@ -404,7 +534,7 @@ function wireUp() {
     findings.filter((f) => f.status !== "IGNORED").map((f) => f.finding_id)));
   $("verify-log").onclick = safe(verifyLog);
   $("csv-findings").onclick = safe(csvFindings);
-  $("csv-log").onclick = csvLog;
+  $("csv-log").onclick = safe(csvLog);
 
   $("select-all").onchange = (e) => {
     document.querySelectorAll(".pick:not(:disabled)").forEach((c) => (c.checked = e.target.checked));
@@ -418,7 +548,35 @@ function wireUp() {
     else await fixOrDelete(b.dataset.act, [b.dataset.id]);
   });
 
-  setInterval(() => lastReport && renderHeader(), 60_000); // keep "X min ago" fresh
+  window.addEventListener("resize", markScrollable);
+  setInterval(() => lastReport && renderSummary(), 60_000); // keep "X min ago" fresh
+}
+
+// ---------------------------------------------------------------- tooltips
+
+// One tooltip for the whole page. It appears next to anything with data-tip="..."
+// when the mouse is on it, when you Tab to it, or when you tap it. It goes above
+// if there is room, else below, and never off the edge of the screen.
+function setupTooltips() {
+  const tip = $("tip");
+  const show = (el) => {
+    tip.textContent = el.dataset.tip;
+    tip.hidden = false;
+    const target = el.getBoundingClientRect(), box = tip.getBoundingClientRect();
+    const above = target.top - box.height - 8;
+    const left = target.left + target.width / 2 - box.width / 2;
+    tip.style.top = `${above >= 4 ? above : target.bottom + 8}px`;
+    tip.style.left = `${Math.max(8, Math.min(left, innerWidth - box.width - 8))}px`;
+  };
+  const hide = () => (tip.hidden = true);
+  const tipOwner = (e) => (e.target instanceof Element ? e.target.closest("[data-tip]") : null);
+
+  for (const [on, off] of [["mouseover", "mouseout"], ["focusin", "focusout"]]) {
+    document.addEventListener(on, (e) => { const el = tipOwner(e); if (el) show(el); });
+    document.addEventListener(off, (e) => { if (tipOwner(e)) hide(); });
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+  window.addEventListener("scroll", hide, true);
 }
 
 // ------------------------------------------------------------------- theme
@@ -431,6 +589,7 @@ function setupThemeToggle() {
     const dark = document.documentElement.dataset.theme === "dark";
     button.textContent = dark ? "☀" : "☾";
     button.title = dark ? "Switch to light" : "Switch to dark";
+    button.setAttribute("aria-label", button.title);
   };
   button.onclick = () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -444,6 +603,7 @@ function setupThemeToggle() {
 // ------------------------------------------------------------------- start
 
 setupThemeToggle();
+setupTooltips();
 
 (async function start() {
   try {
@@ -453,6 +613,6 @@ setupThemeToggle();
     wireUp();
     await loadFindings();
   } catch (e) {
-    toast(e.message, true);
+    toast(friendly(e), true);
   }
 })();
