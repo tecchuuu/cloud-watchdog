@@ -419,7 +419,29 @@ function wireUp() {
   setInterval(() => lastReport && renderHeader(), 60_000); // keep "X min ago" fresh
 }
 
+// ------------------------------------------------------------------- theme
+
+// The ☾/☀ button flips data-theme on <html>; style.css swaps the colour values.
+// The choice is remembered in this browser (localStorage).
+function setupThemeToggle() {
+  const button = $("theme-toggle");
+  const show = () => {
+    const dark = document.documentElement.dataset.theme === "dark";
+    button.textContent = dark ? "☀" : "☾";
+    button.title = dark ? "Switch to light" : "Switch to dark";
+  };
+  button.onclick = () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch { /* private window: just don't remember */ }
+    show();
+  };
+  show();
+}
+
 // ------------------------------------------------------------------- start
+
+setupThemeToggle();
 
 (async function start() {
   try {

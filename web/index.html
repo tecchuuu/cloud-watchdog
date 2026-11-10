@@ -15,6 +15,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cloud Watchdog</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Pick the theme before the page draws, so dark mode doesn't flash white first.
+    // Your choice from the ☾/☀ button wins; otherwise follow the computer's setting.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
 </head>
 <body>
   <div id="loading-bar" class="loading-bar" hidden></div>
@@ -33,6 +43,7 @@
       <button class="tab" data-view="report">Report</button>
     </nav>
     <div class="who">
+      <button id="theme-toggle" class="theme-toggle" title="Switch light / dark">☾</button>
       <span id="username"></span>
       <button id="logout" class="link">Log out</button>
     </div>
@@ -134,6 +145,7 @@
           <button id="csv-findings">Download findings CSV</button>
         </span>
       </h2>
+      <div class="box">
       <table class="grid">
         <thead>
           <tr><th>#</th><th>Time</th><th>User</th><th>Action</th><th>Result</th>
@@ -141,12 +153,15 @@
         </thead>
         <tbody id="log-body"></tbody>
       </table>
+      </div>
 
       <h2>Ignored <span class="muted small">tagged watchdog-ignore=true, skipped by scans</span></h2>
+      <div class="box">
       <table class="grid">
         <thead><tr><th>Resource</th><th>Problem</th><th>Reason</th></tr></thead>
         <tbody id="ignored-body"></tbody>
       </table>
+      </div>
     </section>
   </main>
 
