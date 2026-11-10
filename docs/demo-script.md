@@ -5,7 +5,7 @@ Video: ~5–7 min, due **Nov 16, 11:59 PM**. Live demo: **Nov 17**.
 
 ## Before recording
 
-- [ ] Lab started, CloudShell open, `cd ~/cloud-watchdog`
+- [ ] **Lab started** (without it the dashboard loads but shows no data), CloudShell open, `cd ~/cloud-watchdog`
 - [ ] Day before (optional): `bash scripts/plant-mess.sh --ec2` and `cd infra && tofu apply -var idle_hours=2`
 - [ ] `bash scripts/reset-demo.sh` → dashboard empty, Report empty
 - [ ] Logged in to the dashboard; Gmail open with an old Watchdog email
@@ -41,6 +41,7 @@ Same steps as the live demo below, steps 2–7.
 
 ### 5. Limitations and future work (30 s)
 **Say** (pick 3–4):
+- In a Learner Lab the app only works while a lab session is running (tested: page and login stay up, the Lambdas don't run), so the daily scan can't be shown overnight. In a normal account it runs 24/7.
 - One AWS account only: scanning many needs cross-account roles, which Learner Lab blocks.
 - Costs are estimates from a price list, not the real bill.
 - Runs on LabRole, which has more permissions than it needs. Future: least-privilege role.

@@ -74,6 +74,11 @@ function friendly(error) {
     return "Can't reach the Watchdog API. Check your internet connection. " +
            "On a new install, check the CORS origin in API Gateway (README step 9).";
   }
+  // API Gateway's own words when it can't run the Lambda. Seen when the Learner Lab session is off.
+  if (/internal server error/i.test(error.message)) {
+    return "The Watchdog API could not run. In an AWS Academy Learner Lab this happens " +
+           "when the lab session is not started: start the lab, then try again.";
+  }
   return error.message;
 }
 

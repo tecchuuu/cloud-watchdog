@@ -365,5 +365,8 @@ API Gateway → CORS → **Access-Control-Allow-Origin** must be your `dashboard
 **Cognito says `redirect_mismatch`**
 The app client's callback / sign-out URL must be your `dashboard_url` exactly, **with** the `/` at the end (step 8).
 
+**The dashboard opens and you can log in, but it says it couldn't load the findings**
+Your Learner Lab session is not running. The page (Amplify) and the login (Cognito) work without it, but the Lambdas don't run, so there is no data and the daily scan doesn't fire. Press **Start Lab**, wait for the green dot, then **Try again**. In a normal AWS account there is no lab session and everything runs around the clock.
+
 **Scan now says it timed out**
 API Gateway gives up after 30 seconds, but the scan keeps running in Lambda. Wait a minute and refresh.
