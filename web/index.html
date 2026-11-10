@@ -19,7 +19,15 @@
 <body>
   <div id="loading-bar" class="loading-bar" hidden></div>
   <header class="topbar">
-    <div class="brand">Cloud Watchdog</div>
+    <div class="brand">
+      <!-- logo: a shield (security) with an eye (watching) -->
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" fill="currentColor"/>
+        <path d="M6.5 12s2-3.5 5.5-3.5 5.5 3.5 5.5 3.5-2 3.5-5.5 3.5S6.5 12 6.5 12z" fill="#fff"/>
+        <circle cx="12" cy="12" r="1.8" fill="currentColor"/>
+      </svg>
+      Cloud Watchdog
+    </div>
     <nav class="tabs">
       <button class="tab active" data-view="findings">Findings</button>
       <button class="tab" data-view="report">Report</button>
@@ -32,12 +40,10 @@
 
   <main>
     <!-- ======================= Findings ======================= -->
-    <section id="view-findings" class="view">
+    <section id="view-findings" class="view findings-layout">
+      <div class="findings-main">
       <div class="toolbar">
-        <div>
-          <span id="grade-badge" class="grade-badge">–</span>
-          <span id="last-scan" class="muted">Last scan: …</span>
-        </div>
+        <h1 class="page-title">Findings <span id="findings-count" class="muted"></span></h1>
         <div class="buttons">
           <button id="scan-now">Scan now</button>
           <button id="fix-selected" disabled>Fix selected</button>
@@ -63,6 +69,31 @@
         </tbody>
       </table>
       <p id="findings-empty" class="empty" hidden>No problems found. 🎉</p>
+      </div>
+
+      <!-- Summary box: one label/value per row, easy to scan top to bottom -->
+      <aside class="summary">
+        <div class="summary-grade">
+          <span id="grade-badge" class="grade-badge">–</span>
+          <div>
+            <div class="summary-label">Grade</div>
+            <div id="s-score" class="muted small"></div>
+          </div>
+        </div>
+        <dl>
+          <dt>Last scan</dt><dd id="last-scan">…</dd>
+        </dl>
+        <dl>
+          <dt><span class="dot dot-HIGH"></span>High</dt><dd id="s-high">–</dd>
+          <dt><span class="dot dot-MEDIUM"></span>Medium</dt><dd id="s-medium">–</dd>
+          <dt><span class="dot dot-LOW"></span>Low</dt><dd id="s-low">–</dd>
+        </dl>
+        <dl>
+          <dt>Wasted</dt><dd id="s-wasted">–</dd>
+          <dt>Saved so far</dt><dd id="s-saved" class="good">–</dd>
+        </dl>
+        <p class="muted small">per month, estimated</p>
+      </aside>
     </section>
 
     <!-- ======================= Report ======================= -->

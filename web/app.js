@@ -111,12 +111,21 @@ function renderHeader() {
   badge.textContent = s.grade || "–";
   badge.className = `grade-badge grade-${s.grade || "none"}`;
 
+  $("s-score").textContent = s.score != null ? `${s.score} / 100` : "";
+
   const lastScan = $("last-scan");
-  lastScan.textContent = `Last scan: ${timeAgo(lastReport.last_scan)}`;
+  lastScan.textContent = timeAgo(lastReport.last_scan);
   lastScan.title = localTime(lastReport.last_scan);
   const stale = !lastReport.last_scan ||
     Date.now() - new Date(lastReport.last_scan) > STALE_HOURS * 3600 * 1000;
-  lastScan.className = stale ? "stale" : "muted";
+  lastScan.className = stale ? "stale" : "";
+
+  // Summary box: the same numbers the Report tab shows
+  $("s-high").textContent = s.counts.HIGH;
+  $("s-medium").textContent = s.counts.MEDIUM;
+  $("s-low").textContent = s.counts.LOW;
+  $("s-wasted").textContent = `$${Number(s.wasted_usd || 0).toFixed(2)}`;
+  $("s-saved").textContent = `$${Number(s.saved_usd || 0).toFixed(2)}`;
 }
 
 function renderFindings() {
@@ -129,18 +138,21 @@ function renderFindings() {
         <button data-act="FIX" data-id="${esc(f.finding_id)}">Fix</button>
         <button data-act="DELETE" data-id="${esc(f.finding_id)}" class="danger">Delete</button>
         <button data-act="IGNORE" data-id="${esc(f.finding_id)}">Ignore</button>`;
+    const category = f.category === "cost" ? "Cost" : "Security";
     return `
-      <tr class="${ignored ? "ignored" : ""}">
+      <tr class="row-${esc(f.severity)} ${ignored ? "ignored" : ""}">
         <td><input type="checkbox" class="pick" value="${esc(f.finding_id)}" ${ignored ? "disabled" : ""}></td>
         <td><span class="sev sev-${esc(f.severity)}">${esc(f.severity)}</span></td>
         <td><span class="status status-${esc(f.status)}">${esc(f.status)}</span></td>
         <td>${esc(f.resource_name)}<div class="muted small">${esc(f.region)}</div></td>
-        <td>${esc(f.detail)}${cis}${note}</td>
+        <td><span class="cat">${category}</span> ${esc(f.detail)}${cis}${note}</td>
         <td class="num">${money(f.est_monthly_usd)}</td>
         <td class="row-actions">${actions}</td>
       </tr>`;
   }).join("");
-  $("findings-empty").hidden = findings.some((f) => f.status !== "IGNORED");
+  const active = findings.filter((f) => f.status !== "IGNORED").length;
+  $("findings-count").textContent = active ? `(${active})` : "";
+  $("findings-empty").hidden = active > 0;
   $("select-all").checked = false;
   updateBulkButtons();
 }
