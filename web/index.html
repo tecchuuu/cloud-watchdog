@@ -84,12 +84,14 @@
 
       <!-- Summary box: one label/value per row, easy to scan top to bottom -->
       <aside class="summary">
+        <!-- Grade as a score (big letter + bar out of 100), not a circle: a letter in a circle reads as a profile picture -->
         <div class="summary-grade">
-          <span id="grade-badge" class="grade-badge">–</span>
-          <div>
-            <div class="summary-label">Grade</div>
-            <div id="s-score" class="muted small"></div>
+          <div class="summary-label">Grade</div>
+          <div class="grade-row">
+            <span id="grade-badge" class="grade-letter">–</span>
+            <span id="s-score" class="muted"></span>
           </div>
+          <div class="meter"><div id="s-meter" class="meter-fill"></div></div>
         </div>
         <dl>
           <dt>Last scan</dt><dd id="last-scan">…</dd>

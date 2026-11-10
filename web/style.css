@@ -99,9 +99,12 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
   position: sticky; top: 16px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
 }
-.summary-grade { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; }
-.summary-grade .grade-badge { width: 44px; height: 44px; font-size: 20px; }
-.summary-label { font-weight: 600; }
+.summary-grade { padding-bottom: 14px; }
+.summary-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.grade-row { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 8px; }
+.grade-letter { font-size: 44px; font-weight: 800; line-height: 1; color: var(--muted); }
+.meter { height: 6px; border-radius: 99px; background: var(--panel); overflow: hidden; }
+.meter-fill { height: 100%; width: 0; border-radius: 99px; background: var(--muted); transition: width .4s; }
 .summary dl {
   display: grid; grid-template-columns: 1fr auto; row-gap: 8px;
   margin: 0; padding: 12px 0; border-top: 1px solid var(--line);
@@ -117,9 +120,12 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
 
 /* Narrow screens: summary box above the table */
 @media (max-width: 900px) {
-  .findings-layout { grid-template-columns: 1fr; }
+  .findings-layout { grid-template-columns: minmax(0, 1fr); }
   .summary { position: static; order: -1; }
+  .topbar { flex-wrap: wrap; gap: 8px 16px; padding: 10px 16px; }
 }
+/* A wide table scrolls inside its card instead of pushing the whole page sideways */
+.findings-main, .box { overflow-x: auto; }
 
 /* Risk colour on the left edge of each row */
 .grid tr[class^="row-"] td:first-child { border-left: 4px solid transparent; }
@@ -148,6 +154,9 @@ button.link { border: none; background: none; color: var(--accent); padding: 0; 
 .grade-D, .grade-bg-D { background: var(--medium); }
 .grade-F, .grade-bg-F { background: var(--high); }
 .grade-text-A { color: var(--good); }
+.grade-text-B { color: #65a30d; }
+.grade-text-C { color: #ca8a04; }
+.grade-text-D { color: var(--medium); }
 .grade-text-F { color: var(--high); }
 
 .grid { width: 100%; border-collapse: collapse; }

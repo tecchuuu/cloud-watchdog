@@ -109,9 +109,11 @@ function renderHeader() {
   const s = lastReport.summary;
   const badge = $("grade-badge");
   badge.textContent = s.grade || "–";
-  badge.className = `grade-badge grade-${s.grade || "none"}`;
+  badge.className = `grade-letter grade-text-${s.grade || "none"}`;
 
   $("s-score").textContent = s.score != null ? `${s.score} / 100` : "";
+  $("s-meter").style.width = `${s.score ?? 0}%`;
+  $("s-meter").className = `meter-fill grade-bg-${s.grade || "none"}`;
 
   const lastScan = $("last-scan");
   lastScan.textContent = timeAgo(lastReport.last_scan);
