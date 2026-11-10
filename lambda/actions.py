@@ -14,6 +14,10 @@ Fix   = remove the risk, keep the resource (reversible)
 Delete = remove the resource (not reversible; the dashboard asks to confirm)
 Ignore = tag it watchdog-ignore=true so future scans skip it, and keep the reason
 
+On AWS, API Gateway calls lambda_handler() for these routes (all need a Cognito login):
+    GET  /findings        POST /scan        POST /preview     GET /report
+    POST /fix             POST /delete      POST /ignore      GET /verify-log
+
 CloudShell test mode (before API Gateway exists):
     python3 lambda/actions.py list
     python3 lambda/actions.py preview-fix   '<finding_id>' ...   (or: all)
@@ -38,6 +42,12 @@ import scanner as sc   # shared helpers: tag_dict, now_iso, bucket checks, port 
 
 FINDINGS_TABLE = os.environ.get("FINDINGS_TABLE", "watchdog_findings")
 ACTIONS_TABLE = os.environ.get("ACTIONS_TABLE", "watchdog_actions")
+REPORTS_BUCKET = os.environ.get("REPORTS_BUCKET")
+SCANNER_FUNCTION_NAME = os.environ.get("SCANNER_FUNCTION_NAME", "watchdog-scanner")
+
+MAX_IDS_PER_CALL = 50              # one request can't ask for more than this
+HISTORY_SCANS = 30                 # Report tab: last 30 scans
+LOG_ENTRIES_SHOWN = 100            # Report tab: newest 100 log entries
 
 GENESIS_HASH = "0" * 64            # prev_hash of the very first log entry
 IGNORE_TAG = {"Key": "watchdog-ignore", "Value": "true"}
@@ -426,6 +436,143 @@ def verify_log():
             return {"ok": False, "broken_at": seq, "entries": len(log)}
         expected_seq, expected_prev = seq + 1, e["hash"]
     return {"ok": True, "broken_at": None, "entries": len(log)}
+
+
+# ------------------------------------------------------- report + scan now
+
+def _all_findings():
+    items, kwargs = [], {}
+    while True:
+        page = findings_table.scan(**kwargs)
+        items += page["Items"]
+        if "LastEvaluatedKey" not in page:
+            return [{k: _plain(v) if isinstance(v, Decimal) else v for k, v in i.items()}
+                    for i in items]
+        kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
+def scan_history():
+    """Summaries of the last HISTORY_SCANS scans, oldest first, from the S3 reports."""
+    if not REPORTS_BUCKET:
+        return []
+    s3 = boto3.client("s3")
+    keys = []
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=REPORTS_BUCKET, Prefix="reports/"):
+        keys += [o["Key"] for o in page.get("Contents", [])]
+    history = []
+    for key in sorted(keys)[-HISTORY_SCANS:]:           # names sort by date
+        report = json.loads(s3.get_object(Bucket=REPORTS_BUCKET, Key=key)["Body"].read())
+        report.pop("findings", None)                    # the summary is enough here
+        history.append(report)
+    return history
+
+
+def report():
+    """Everything the Report tab shows."""
+    findings = _all_findings()
+    history = scan_history()
+    summary = sc.build_summary(findings, [], history[-1]["scanned_at"] if history else None)
+    log = read_log()[-LOG_ENTRIES_SHOWN:][::-1]          # newest first
+    return {"summary": summary,
+            "last_scan": summary["scanned_at"],          # for "Last scan: X ago"
+            "history": history,
+            "audit_log": log,
+            "ignored": [f for f in findings if f["status"] == "IGNORED"]}
+
+
+def scan_now():
+    """The Scan now button: run the scanner Lambda and wait for its summary."""
+    resp = boto3.client("lambda").invoke(FunctionName=SCANNER_FUNCTION_NAME,
+                                          InvocationType="RequestResponse")
+    payload = json.loads(resp["Payload"].read() or "null")
+    if resp.get("FunctionError"):
+        raise RuntimeError(payload.get("errorMessage", "scanner failed") if payload else "scanner failed")
+    return payload
+
+
+# ------------------------------------------------------------ the API
+#
+# API Gateway (HTTP API, payload 2.0) sends every request here.
+# It has already checked the Cognito login token; the username comes
+# from that verified token, never from the request body, so it can't be faked.
+
+def _user(event):
+    claims = (event.get("requestContext", {}).get("authorizer", {})
+              .get("jwt", {}).get("claims", {}))
+    return claims.get("cognito:username") or claims.get("username")
+
+
+def _body(event):
+    raw = event.get("body") or "{}"
+    if event.get("isBase64Encoded"):
+        import base64
+        raw = base64.b64decode(raw).decode()
+    return json.loads(raw)
+
+
+def _ids(body):
+    ids = body.get("finding_ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise ValueError("finding_ids must be a non-empty list of strings")
+    if len(ids) > MAX_IDS_PER_CALL:
+        raise ValueError(f"at most {MAX_IDS_PER_CALL} finding_ids per request")
+    return ids
+
+
+def _respond(status, data):
+    return {"statusCode": status,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(data, default=_plain)}
+
+
+def lambda_handler(event, context):
+    route = event.get("routeKey", "")                    # e.g. "POST /fix"
+    user = _user(event)
+    if not user:
+        return _respond(401, {"error": "not logged in"})
+
+    try:
+        body = _body(event) if route.startswith("POST") else {}
+
+        if route == "GET /findings":
+            show_all = (event.get("queryStringParameters") or {}).get("all") == "1"
+            findings = [f for f in _all_findings() if show_all or f["status"] != "FIXED"]
+            return _respond(200, {"findings": findings})
+
+        if route == "POST /scan":
+            return _respond(200, scan_now())
+
+        if route == "POST /preview":
+            action = body.get("action")
+            if action not in ("FIX", "DELETE"):
+                raise ValueError("action must be FIX or DELETE")
+            return _respond(200, {"preview": preview(action, _ids(body))})
+
+        if route == "POST /fix":
+            return _respond(200, {"results": run_many("FIX", _ids(body), user)})
+
+        if route == "POST /delete":
+            return _respond(200, {"results": run_many("DELETE", _ids(body), user)})
+
+        if route == "POST /ignore":
+            fid, reason = body.get("finding_id"), body.get("reason")
+            if not isinstance(fid, str):
+                raise ValueError("finding_id is required")
+            return _respond(200, {"results": [run("IGNORE", fid, user, reason)]})
+
+        if route == "GET /report":
+            return _respond(200, report())
+
+        if route == "GET /verify-log":
+            return _respond(200, verify_log())
+
+        return _respond(404, {"error": f"unknown route {route}"})
+
+    except (ValueError, json.JSONDecodeError) as e:      # the request was wrong
+        return _respond(400, {"error": str(e)})
+    except Exception as e:                               # something broke on our side
+        print(f"ERROR {route}: {e!r}")                   # shows in CloudWatch Logs
+        return _respond(500, {"error": str(e)})
 
 
 # ----------------------------------------------------- CloudShell test mode

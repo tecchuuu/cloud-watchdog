@@ -1,20 +1,24 @@
-# Lambda: the scanner (lambda/scanner.py) running in AWS.
-# The actions Lambda (Fix / Delete / Ignore) is added here later.
+# Lambda: two functions built from the same zip of the lambda/ folder.
+#   watchdog-scanner  finds problems (scanner.py)
+#   watchdog-actions  Fix / Delete / Ignore + the dashboard's API (actions.py, uses scanner.py's helpers)
 
-# Zip scanner.py. When the file changes, the hash changes and `tofu apply` uploads it again.
-data "archive_file" "scanner" {
+# Zip lambda/. When any file changes, the hash changes and `tofu apply` uploads it again.
+data "archive_file" "lambda" {
   type        = "zip"
-  source_file = "${path.module}/../lambda/scanner.py"
-  output_path = "${path.module}/build/scanner.zip"
+  source_dir  = "${path.module}/../lambda"
+  output_path = "${path.module}/build/lambda.zip"
+  excludes    = ["__pycache__"]
 }
+
+# ------------------------------------------------------------------ scanner
 
 resource "aws_lambda_function" "scanner" {
   function_name    = "watchdog-scanner"
   role             = local.lab_role_arn
   runtime          = "python3.12"
   handler          = "scanner.lambda_handler" # file scanner.py, function lambda_handler
-  filename         = data.archive_file.scanner.output_path
-  source_code_hash = data.archive_file.scanner.output_base64sha256
+  filename         = data.archive_file.lambda.output_path
+  source_code_hash = data.archive_file.lambda.output_base64sha256
   timeout          = 120 # seconds; two regions + CloudWatch calls per instance
   memory_size      = 256
 
@@ -45,4 +49,34 @@ resource "aws_cloudwatch_log_group" "scanner" {
 resource "aws_lambda_function_event_invoke_config" "scanner" {
   function_name          = aws_lambda_function.scanner.function_name
   maximum_retry_attempts = 0
+}
+
+# ------------------------------------------------------------------ actions
+
+resource "aws_lambda_function" "actions" {
+  function_name    = "watchdog-actions"
+  role             = local.lab_role_arn
+  runtime          = "python3.12"
+  handler          = "actions.lambda_handler"
+  filename         = data.archive_file.lambda.output_path
+  source_code_hash = data.archive_file.lambda.output_base64sha256
+  timeout          = 30 # API Gateway gives up after 30 s anyway
+  memory_size      = 256
+
+  environment {
+    variables = {
+      REGIONS               = join(",", var.regions)
+      FINDINGS_TABLE        = aws_dynamodb_table.findings.name
+      ACTIONS_TABLE         = aws_dynamodb_table.actions.name
+      REPORTS_BUCKET        = terraform_data.reports_bucket.output
+      SCANNER_FUNCTION_NAME = aws_lambda_function.scanner.function_name
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.actions]
+}
+
+resource "aws_cloudwatch_log_group" "actions" {
+  name              = "/aws/lambda/watchdog-actions"
+  retention_in_days = 14
 }
