@@ -32,8 +32,13 @@ ask "Cognito client ID"      CLIENT_ID
 
 printf 'API_URL=%q\nCOGNITO_DOMAIN=%q\nCLIENT_ID=%q\n' "$API_URL" "$COGNITO_DOMAIN" "$CLIENT_ID" > "$SAVED"
 
-# Values tofu made (infra/outputs.tf)
-OUTPUTS=$(cd infra && tofu output -json)
+# Values tofu made (infra/outputs.tf). If CloudShell restarted, /tmp/tofu-data
+# is empty and tofu needs `tofu init` first, so do that once and try again.
+if ! OUTPUTS=$(cd infra && tofu output -json 2>/dev/null); then
+  echo "Running tofu init (CloudShell was restarted)…"
+  (cd infra && tofu init -input=false > /dev/null)
+  OUTPUTS=$(cd infra && tofu output -json)
+fi
 out() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1']['value'])" <<< "$OUTPUTS"; }
 APP_ID=$(out amplify_app_id)
 DASHBOARD_URL=$(out dashboard_url)
