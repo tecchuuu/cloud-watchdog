@@ -6,6 +6,12 @@ Built for small IT teams (2–10 people) that run AWS without a dedicated cloud 
 
 > CS446/IT332 Cloud Computing, Bangkok University, 2026. Runs in an AWS Academy Learner Lab.
 
+## Architecture
+
+![Cloud Watchdog architecture](docs/architecture.png)
+
+Arrows 1 to 3 are the dashboard path. The dotted arrow is the daily scan. The orange dashed box holds the two services you set up by hand. (Source: `docs/architecture.tex`. Service icons are the official AWS Architecture Icons.)
+
 ## AWS services
 
 | Service | Job |
@@ -47,6 +53,7 @@ Everything runs in **AWS CloudShell** inside an AWS Academy Learner Lab. Nothing
 1. Start the Learner Lab and open the AWS Console.
 2. Check the region (top right) is **N. Virginia (us-east-1)**.
 3. Click the CloudShell icon (`>_`) in the top bar and wait for the prompt.
+4. Check OpenTofu is there: `tofu version`. It is already installed if you did Lab 12 (Cloud Automation). If it says `command not found`, run that lab's setup step first.
 
 ### 2. Get the code
 

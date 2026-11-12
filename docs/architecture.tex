@@ -3,79 +3,141 @@
 %
 % "standalone" makes a PDF exactly the size of the picture (no page, no margins),
 % so it drops straight into slides or the report. TikZ draws the boxes and arrows.
+% The service icons are the official AWS Architecture Icons (docs/icons/*.png).
+%
+% Every arrow is made of horizontal and vertical pieces only:
+%   (a) -- (b)   straight line
+%   (a) -| (b)   across first, then up/down
+%   (a) |- (b)   up/down first, then across
 
-\documentclass[tikz, border=10pt]{standalone}
-\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
+\documentclass[tikz, border=12pt]{standalone}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+
+\definecolor{ink}{HTML}{1B2A49}      % lines and text
+\definecolor{byhand}{HTML}{F59E0B}   % the orange "set up by hand" outline
+\definecolor{soft}{HTML}{EEF1F6}     % grey boxes: people and the scanned account
+
+% \icon{name}{x,y}{file}: one service icon
+\newcommand{\icon}[3]{\node[inner sep=0pt] (#1) at (#2) {\includegraphics[width=13mm]{icons/#3.png}};}
 
 \begin{document}
 \begin{tikzpicture}[
-    font=\sffamily\small,
-    >={Stealth[length=2.2mm]},
-    % one style per kind of box, so the legend can explain them
-    svc/.style   ={draw, rounded corners=3pt, fill=blue!6, align=center,
-                   minimum width=31mm, minimum height=11mm},
-    hand/.style  ={svc, fill=orange!12, dashed},              % set up by hand in the console
-    data/.style  ={svc, fill=green!8},                        % where data is stored
-    actor/.style ={svc, fill=gray!12, rounded corners=8pt},   % people and the scanned account
-    lbl/.style   ={font=\sffamily\scriptsize, fill=white, inner sep=1.5pt, align=center},
-    flow/.style  ={->, thick},
-    sched/.style ={->, thick, densely dotted},
+    font=\sffamily\small, text=ink,
+    >={Stealth[length=2.4mm, width=1.9mm]},
+    svc/.style  ={align=center, inner sep=1.5pt},                       % text under or beside an icon
+    lbl/.style  ={font=\sffamily\scriptsize, fill=white, inner sep=1.6pt, align=center},  % text on an arrow
+    box/.style  ={draw=ink!35, fill=soft, rounded corners=5pt, align=center, inner sep=7pt},
+    flow/.style ={->, draw=ink, line width=0.8pt, rounded corners=3pt},
+    daily/.style={flow, densely dotted},
+    check/.style={flow, dashed},
   ]
 
-  % ---------------------------------------------------------------- boxes
-  \node[actor] (user)  at (0, 0)      {Admin\\(browser)};
+  % ------------------------------------------------------------- left: the admin
+  \node[box, minimum width=24mm, minimum height=21mm] (admin) at (0, -1.2) {};
+  \draw[ink, line width=0.9pt] (0, -0.62) circle (2.1mm);                         % a little person
+  \draw[ink, line width=0.9pt] (-0.42, -1.18) arc (180:0:0.42 and 0.36);
+  \node[svc,anchor=north] at (0, -1.22) {Admin\\(browser)};
 
-  \node[svc]   (amp)   at (5.2,  3.6) {Amplify\\\scriptsize dashboard files};
-  \node[hand]  (cog)   at (5.2,  1.8) {Cognito\\\scriptsize login, tokens};
-  \node[hand]  (apigw) at (5.2,  0)   {API Gateway\\\scriptsize HTTP API + JWT check};
+  % ------------------------------------------------- dashboard path (top middle)
+  \icon{amplify}{6, 4.2}{amplify}
+  \node[svc,right=2mm of amplify, align=left] (amplifyname) {AWS Amplify\\(dashboard files)};
 
-  \node[svc]   (act)   at (10.4, 0)   {Lambda\\\texttt{watchdog-actions}};
-  \node[svc]   (scan)  at (10.4,-3.6) {Lambda\\\texttt{watchdog-scanner}};
-  \node[svc]   (eb)    at (5.2, -3.6) {EventBridge\\\scriptsize \texttt{rate(1 day)}};
+  \icon{cognito}{6, 1.5}{cognito}
+  \node[svc,right=2mm of cognito, align=left] (cognitoname) {Amazon Cognito\\(login, tokens)};
 
-  \node[data]  (find)  at (15.6, 1.8) {DynamoDB\\\texttt{watchdog\_findings}};
-  \node[data]  (log)   at (15.6, 0)   {DynamoDB\\\texttt{watchdog\_actions}\\\scriptsize audit log, hash chain};
-  \node[data]  (s3)    at (15.6,-1.8) {S3\\\scriptsize scan reports (JSON)};
-  \node[actor] (acct)  at (15.6,-3.6) {Your AWS account\\\scriptsize EIP, SG, S3, EBS, EC2\\\scriptsize us-east-1 + us-west-2};
+  \icon{apigw}{6, -1.2}{apigateway}
+  \node[svc,right=2mm of apigw, align=left] (apigwname) {Amazon API Gateway\\(HTTP API + JWT check)};
 
-  \node[svc]   (sns)   at (5.2, -5.6) {SNS\\\scriptsize \texttt{watchdog-alerts}};
-  \node[svc]   (alarm) at (10.4,-5.6) {CloudWatch alarm\\\scriptsize scanner errors};
-  \node[actor] (mail)  at (0,  -5.6)  {Admin's\\email};
-
-  % ---------------------------------------------------- dashboard requests
-  \draw[flow] ([xshift=-6mm]user.north) |- node[lbl, pos=0.75] {\textbf{1} load page} (amp);
-  \draw[flow] ([xshift=6mm]user.north) |- node[lbl, pos=0.7] {\textbf{2} log in (code + PKCE)\\$\leftarrow$ ID token} (cog);
-  \draw[flow] (user) -- node[lbl] {\textbf{3} HTTPS\\+ Bearer token} (apigw);
-  \draw[->, dashed] (apigw) -- node[lbl] {check signature,\\audience, expiry} (cog);
-  \draw[flow] (apigw) -- node[lbl] {valid only:\\route + username} (act);
-
-  % -------------------------------------------------------- actions Lambda
-  \draw[flow] (act) -- node[lbl, sloped] {read / set status} (find.west);
-  \draw[flow] (act) -- node[lbl] {append entry} (log);
-  \draw[flow] (act) -- node[lbl, sloped, pos=0.8] {history} (s3.west);
-  \draw[flow] (act.south east) -- node[lbl, pos=0.55, left=1pt] {Fix / Delete /\\Ignore (tag)} (acct.north west);
-  \draw[flow] (act) -- node[lbl] {Scan now} (scan);
-
-  % ------------------------------------------------------- daily scan path
-  \draw[sched] (eb) -- node[lbl] {every day} (scan);
-  \draw[flow] (scan) -- node[lbl] {read only:\\describe / list} (acct);
-  \draw[flow] (scan.north east) -- node[lbl, pos=0.4] {save JSON} (s3.south west);
-  % around the outside, so it doesn't cross the other boxes
-  \draw[flow] ([xshift=-4mm]scan.south east) -- ++(0,-0.6) coordinate (a) -- (a -| 18.6,0) coordinate (b)
-        -- node[lbl, pos=0.35] {save\\NEW /\\OPEN /\\FIXED} (b |- find.east) -- (find.east);
-  \draw[flow] (scan) -- node[lbl, sloped] {new issues} (sns);
-  \draw[flow] (scan) -- node[lbl] {Errors metric} (alarm);
-  \draw[flow] (alarm) -- node[lbl] {alarm} (sns);
-  \draw[flow] (sns) -- node[lbl] {email} (mail);
-
-  % ---------------------------------------------------------------- legend
-  \node[svc,   minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k1) at (0, -2.1)  {OpenTofu};
-  \node[hand,  minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k2) at (0, -2.85) {by hand (README)};
-  \node[data,  minimum width=22mm, minimum height=6mm, font=\sffamily\scriptsize] (k3) at (0, -3.6)  {storage (OpenTofu)};
+  % the two services set up by hand
   \begin{scope}[on background layer]
-    \node[draw=gray!50, rounded corners, fit=(k1)(k2)(k3), inner sep=4pt,
-          label={[font=\sffamily\scriptsize\bfseries]above:Set up with}] {};
+    \node[draw=byhand, dashed, line width=1pt, rounded corners=6pt, fill=byhand!7,
+          fit=(cognito)(cognitoname)(apigw)(apigwname), inner sep=9pt] (handbox) {};
   \end{scope}
+
+  % ------------------------------------------------------------ the two Lambdas
+  \icon{actions}{14.6, -1.2}{lambda}
+  \node[svc,below=1mm of actions] (actionsname) {AWS Lambda\\(watchdog-actions)};
+
+  \icon{scanner}{14.6, -6.0}{lambda}
+  \node[svc,below=1mm of scanner] (scannername) {AWS Lambda\\(watchdog-scanner)};
+
+  \icon{eb}{6, -6.0}{eventbridge}
+  \node[svc,below=1mm of eb] (ebname) {Amazon EventBridge\\(rate: 1 day)};
+
+  % ---------------------------------------------------------- right: the storage
+  \icon{findings}{21.4, 4.2}{dynamodb}
+  \node[svc,below=1mm of findings] (findingsname) {Amazon DynamoDB\\(watchdog\_findings)};
+
+  \icon{log}{21.4, 1.3}{dynamodb}
+  \node[svc,below=1mm of log] (logname) {Amazon DynamoDB\\(watchdog\_actions)\\{\scriptsize audit log, hash chain}};
+
+  \icon{s3}{21.4, -1.9}{s3}
+  \node[svc,below=1mm of s3] (s3name) {Amazon S3\\(scan reports, JSON)};
+
+  \node[box] (acct) at (21.4, -4.55) {Your AWS account\\{\scriptsize EIP, SG, S3, EBS, EC2}\\{\scriptsize us-east-1 + us-west-2}};
+
+  % ------------------------------------------------------------- bottom: alerts
+  \icon{cw}{14.6, -10.2}{cloudwatch}
+  \node[svc,below=1mm of cw] {Amazon CloudWatch\\(alarm: scanner errors)};
+
+  \icon{sns}{9.6, -10.2}{sns}
+  \node[svc,below=1mm of sns] {Amazon SNS\\(watchdog-alerts)};
+
+  \node[box, minimum width=30mm, minimum height=13mm] (mail) at (3.6, -10.2) {};
+  \draw[ink, line width=0.9pt, rounded corners=1pt] (2.55, -10.45) rectangle (3.25, -9.95);   % a little envelope
+  \draw[ink, line width=0.9pt] (2.55, -9.95) -- (2.9, -10.22) -- (3.25, -9.95);
+  \node[svc,anchor=west, align=left] at (3.4, -10.2) {Admin's\\email};
+
+  % ================================================================== arrows
+
+  % dashboard path: 1 load the page, 2 log in, 3 call the API
+  \draw[flow] ([xshift=-4mm]admin.north) |- node[lbl, pos=0.78] {\textbf{1} load page} (amplify.west);
+  \draw[flow] ([xshift=4mm]admin.north)  |- node[lbl, pos=0.72] {\textbf{2} log in (code + PKCE)\\$\leftarrow$ ID token} (cognito.west);
+  \draw[flow] (admin.east) -- node[lbl] {\textbf{3} HTTPS\\+ Bearer token} (apigw.west);
+
+  % API Gateway checks the token against Cognito's keys, then lets the request in
+  \draw[check] (apigw.north) -- node[lbl, right=1mm, align=left] {check signature,\\audience, expiry} (cognito.south);
+  \draw[flow] (apigwname.east) -- node[lbl] {valid only:\\route +\\username} (actions.west);
+
+  % actions Lambda: one line out, then it forks at right angles
+  \coordinate (fork) at (16.5, -1.2);
+  \draw[flow, -] (actions.east) -- (fork);
+  \draw[flow] (fork) |- node[lbl, pos=0.75] {read / set status} (findings.west);
+  \draw[flow] (fork) |- node[lbl, pos=0.75] {append entry} (log.west);
+  \draw[flow] (fork) |- node[lbl, pos=0.75] {history} (s3.west);
+  \draw[flow] (fork) |- node[lbl, pos=0.75] {Fix / Delete /\\Ignore} (acct.west);
+  \fill[ink] (fork) circle (1.6pt);
+
+  % Scan now: the actions Lambda starts the scanner
+  \draw[flow] (actionsname.south) -- node[lbl] {Scan now} (scanner.north);
+
+  % every day: EventBridge starts the scanner
+  \draw[daily] (eb.east) -- node[lbl] {every day} (scanner.west);
+
+  % scanner: reads the account, then saves a report and the findings.
+  % The three lines go around the outside so they cross nothing.
+  \draw[flow] ([yshift=4.5mm]scanner.east) -| node[lbl, pos=0.24] {read only: describe / list} (acct.south);
+  \draw[flow] (scanner.east) -- (23.5, -6.0) |- (s3.east);
+  \node[lbl] at (23.5, -4.2) {save\\JSON};
+  \draw[flow] ([yshift=-4.5mm]scanner.east) -- (24.9, -6.45) |- (findings.east);
+  \node[lbl] at (24.9, 0.4) {save\\NEW /\\OPEN /\\FIXED};
+
+  % alerts: new findings by email, and an alarm if the scanner fails
+  \draw[flow] ([yshift=-4.5mm]scanner.west) -| node[lbl, pos=0.75] {new\\findings} (sns.north);
+  \draw[flow] (scannername.south) -- node[lbl] {errors} (cw.north);
+  \draw[flow] (cw.west) -- node[lbl] {alarm} (sns.east);
+  \draw[flow] (sns.west) -- node[lbl] {email} (mail.east);
+
+  % ================================================================== legend
+  \node[font=\sffamily\scriptsize\bfseries] at (0.3, -4.6) {Set up with};
+  \node[draw=ink!35, fill=white, rounded corners=3pt, minimum width=31mm, minimum height=6.5mm,
+        font=\sffamily\scriptsize] (k1) at (0.3, -5.3) {OpenTofu};
+  \node[draw=byhand, dashed, line width=0.9pt, fill=byhand!7, rounded corners=3pt, minimum width=31mm,
+        minimum height=6.5mm, font=\sffamily\scriptsize] (k2) at (0.3, -6.15) {by hand (README)};
+  \draw[daily, -] (-1.15, -6.95) -- (-0.25, -6.95);
+  \node[font=\sffamily\scriptsize, anchor=west] at (-0.15, -6.95) {daily schedule};
+  \draw[check, -] (-1.15, -7.45) -- (-0.25, -7.45);
+  \node[font=\sffamily\scriptsize, anchor=west] at (-0.15, -7.45) {token check};
 
 \end{tikzpicture}
 \end{document}
