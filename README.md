@@ -169,7 +169,7 @@ You need your `dashboard_url` from step 4 (`cd ~/cloud-watchdog/infra && tofu ou
 
 8. Menu (☰, top left) → **User pools** → your new pool → **Applications → App clients → watchdog-dashboard → Login pages** tab → **Edit**.
 9. Check **Allowed callback URLs** has your `dashboard_url`. Under **Allowed sign-out URLs**, add the same `dashboard_url`.
-10. Check **OAuth grant types** has **Authorization code grant**, and **OpenID Connect scopes** has **OpenID** and **Email**. **Save changes**.
+10. Check **OAuth grant types** has **Authorization code grant**, and **OpenID Connect scopes** has only **OpenID** and **Email**: if **Phone** is there, click its **×** to remove it (the dashboard never asks for it). **Save changes**.
 
 **Create your user**
 
@@ -225,7 +225,7 @@ The console also gives API Gateway permission to call the Lambda (you can see it
 **Let the dashboard call it from the browser (CORS)**
 
 8. Left menu **CORS** → **Configure**:
-   - **Access-Control-Allow-Origin:** your `dashboard_url` **without** the `/` at the end, e.g. `https://main.xxxxxxxx.amplifyapp.com` (type it, then **Add**)
+   - **Access-Control-Allow-Origin:** your `dashboard_url` **without** the `/` at the end, e.g. `https://main.xxxxxxxx.amplifyapp.com`. Type it, then click **Add**: it must turn into a tag under the box. Typing alone saves nothing, and the dashboard then cannot load any data
    - **Access-Control-Allow-Headers:** `authorization`, `content-type`
    - **Access-Control-Allow-Methods:** `GET`, `POST`
    - **Save**.
@@ -240,7 +240,7 @@ Browsers block a page from calling another site unless that site says it's allow
 curl -i https://<your invoke URL>/report
 ```
 
-You should see `HTTP/2 401` and `{"message":"Unauthorized"}`: no token, no entry. With a token it works; the dashboard in step 10 sends one.
+You should see `HTTP/2 401` and `{"message":"Unauthorized"}`: no token, no entry. If the body says `{"error": "not logged in"}` instead, that route has no authorizer attached: go back to step 7 above and attach `cognito` to all 8 routes. With a token it works; the dashboard in step 10 sends one.
 
 ### 10. Upload the dashboard
 
@@ -298,7 +298,7 @@ export REPORTS_BUCKET=$(cd infra && tofu output -raw reports_bucket)
 python3 lambda/scanner.py
 ```
 
-The first run shows the 4 planted problems as `NEW` with grade **F (15/100)**. Run it again and they show as `OPEN`. If you have other leftovers in your account (an old `launch-wizard-1` security group is common), they show up too: those are real findings.
+The first run shows the 4 planted problems as `NEW` with grade **F (40/100)** on a clean account. Run it again and they show as `OPEN`. If you have other leftovers in your account (an old `launch-wizard-1` security group is common), they show up too: those are real findings.
 
 **Clean up:**
 
@@ -384,7 +384,7 @@ API Gateway → CORS → **Access-Control-Allow-Origin** must be your `dashboard
 The app client's callback / sign-out URL must be your `dashboard_url` exactly, **with** the `/` at the end (step 8).
 
 **The dashboard opens and you can log in, but it says it couldn't load the findings**
-Your Learner Lab session is not running. The page (Amplify) and the login (Cognito) work without it, but the Lambdas don't run, so there is no data and the daily scan doesn't fire. Press **Start Lab**, wait for the green dot, then **Try again**. In a normal AWS account there is no lab session and everything runs around the clock.
+Your Learner Lab session is not running. The page (Amplify) and the login (Cognito) work without it, but the Lambdas don't run, so there is no data. The daily scan still starts on schedule but fails, and you get the `watchdog-scanner-errors` alarm email. Press **Start Lab**, wait for the green dot, then **Try again**. In a normal AWS account there is no lab session and everything runs around the clock.
 
 **Scan now says it timed out**
 API Gateway gives up after 30 seconds, but the scan keeps running in Lambda. Wait a minute and refresh.
