@@ -37,7 +37,8 @@ cloud-watchdog/
 │               deploy-web.sh                  upload the dashboard to Amplify
 │               reset-demo.sh                  wipe findings/log/history for a demo
 │               invoke-actions.sh              call the API Lambda without a browser
-└── docs/       architecture.tex/.pdf (diagram), console-settings.md (every hand-typed
+└── docs/       how-it-works.md (every service explained in plain words: start here),
+                architecture.tex/.pdf (diagram), console-settings.md (every hand-typed
                 value explained), dashboard-design.md (why the dashboard looks the way
                 it does), demo-script.md (video + live demo)
 ```
