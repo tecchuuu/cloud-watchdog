@@ -53,7 +53,18 @@ Everything runs in **AWS CloudShell** inside an AWS Academy Learner Lab. Nothing
 1. Start the Learner Lab and open the AWS Console.
 2. Check the region (top right) is **N. Virginia (us-east-1)**.
 3. Click the CloudShell icon (`>_`) in the top bar and wait for the prompt.
-4. Check OpenTofu is there: `tofu version`. It is already installed if you did Lab 12 (Cloud Automation). If it says `command not found`, run that lab's setup step first.
+4. Check OpenTofu is there: `tofu version`. It is already installed if you did Lab 12 (Cloud Automation) in this lab. If it says `command not found`, install it (the same version and folder Lab 12 uses):
+
+   ```bash
+   mkdir -p ~/.local/bin
+   curl -sL https://github.com/opentofu/opentofu/releases/download/v1.12.11/tofu_1.12.11_linux_amd64.zip -o /tmp/tofu.zip
+   unzip -qo /tmp/tofu.zip tofu -d ~/.local/bin
+   echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
+   export PATH=$HOME/.local/bin:$PATH
+   tofu version
+   ```
+
+   Line 1 makes a folder for your own programs. Line 2 downloads OpenTofu from its official GitHub releases. Line 3 unpacks the `tofu` program into that folder. Lines 4 and 5 tell the shell to look in that folder, now and in future sessions. You should see `OpenTofu v1.12.11`.
 
 ### 2. Get the code
 
