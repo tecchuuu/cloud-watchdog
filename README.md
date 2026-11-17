@@ -40,7 +40,7 @@ cloud-watchdog/
 └── docs/       how-it-works.md (every service explained in plain words: start here),
                 architecture.tex/.pdf (diagram), console-settings.md (every hand-typed
                 value explained), dashboard-design.md (why the dashboard looks the way
-                it does), demo-script.md (video + live demo)
+                it does)
 ```
 
 ## Setup and deploy
