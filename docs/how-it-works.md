@@ -65,6 +65,68 @@ Every service has its own file in `infra/`. All resources get two tags automatic
 
 > "One table is the current state, the other is the history of actions. Both cost nothing when nobody uses them."
 
+**What is inside.** DynamoDB is a NoSQL database: a table declares only its key. Every row
+(an *item*) is a JSON-like bundle of named fields (*attributes*), and two items in the same
+table may have different fields. There are no other columns to set up.
+
+One item in `watchdog_findings` (one problem; every field about it lives in this one item):
+
+```json
+{
+  "finding_id": "unused_eip#us-east-1#eipalloc-01ca0c6c840a0893c",
+  "check": "unused_eip",
+  "category": "cost",
+  "severity": "LOW",
+  "region": "us-east-1",
+  "resource_id": "eipalloc-01ca0c6c840a0893c",
+  "resource_name": "watchdog-test-eip",
+  "detail": "Elastic IP 50.19.38.44 is not attached to anything",
+  "est_monthly_usd": 3.65,
+  "cis": null,
+  "status": "NEW",
+  "first_seen": "2026-11-17T09:08:12Z",
+  "last_seen": "2026-11-17T09:08:12Z"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `finding_id` | The key: check, region and resource joined by `#`. |
+| `check`, `category`, `severity` | Which of the five checks, cost or security, HIGH / MEDIUM / LOW. |
+| `region`, `resource_id`, `resource_name` | Where the problem is. The ID is what you search for in the console. |
+| `detail`, `est_monthly_usd`, `cis` | The sentence the dashboard shows, the cost per month (empty for security findings), the CIS rule number (empty for cost findings). |
+| `status` | NEW, OPEN, FIXED or IGNORED. |
+| `first_seen`, `last_seen` | When a scan first and last found it. |
+| `fixed_at`, `ignore_reason` | Added only when it gets fixed, or ignored with a reason. |
+
+One item in `watchdog_actions` (one button press):
+
+```json
+{
+  "pk": "LOG",
+  "seq": 7,
+  "ts": "2026-11-17T09:20:41Z",
+  "user": "kitti.tree",
+  "action": "FIX",
+  "finding_id": "unused_eip#us-east-1#eipalloc-01ca0c6c840a0893c",
+  "result": "OK",
+  "before": "{ … what the resource looked like … }",
+  "prev_hash": "3f9a…",
+  "hash": "b71c…"
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `pk` | Always `LOG`. Every entry shares it, so they form one group that DynamoDB can return sorted by `seq`. |
+| `seq`, `ts` | The entry's number (1, 2, 3…) and time. |
+| `user` | The dashboard user, taken from the checked login token, never from the request. |
+| `action`, `finding_id` | FIX, DELETE or IGNORE, and on which finding. |
+| `result` | OK, ALREADY_FIXED (it was gone by the time you clicked) or FAILED. |
+| `reason`, `error` | Only when present: the reason typed for Ignore, or what went wrong. |
+| `before` | The resource's settings before the change, saved as JSON text. |
+| `prev_hash`, `hash` | The previous entry's fingerprint and this entry's own. Together they form the chain that *Verify log* checks. |
+
 ### S3: the report bucket (`s3.tf`)
 
 | Setting | Value | Why |
@@ -77,6 +139,25 @@ Every service has its own file in `infra/`. All resources get two tags automatic
 OpenTofu's S3 resource always makes (`GetBucketObjectLockConfiguration`). So this file runs three
 AWS CLI commands instead: create the bucket, block public access, tag it. On `tofu destroy` it
 empties and removes the bucket.
+
+**What one report file holds:** the scan's summary, plus the findings that were still open at
+that moment. The file is written once and never changed.
+
+```json
+{
+  "scanned_at": "2026-11-17T09:08:12Z",
+  "score": 40,
+  "grade": "F",
+  "counts": { "HIGH": 2, "MEDIUM": 0, "LOW": 2 },
+  "new": 4,
+  "open": 0,
+  "fixed_total": 0,
+  "wasted_usd": 3.73,
+  "saved_usd": 0.0,
+  "errors": [],
+  "findings": [ { "finding_id": "…", "severity": "HIGH", "…": "…" } ]
+}
+```
 
 > "DynamoDB holds what is true now. S3 keeps a dated copy of every scan."
 
