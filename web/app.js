@@ -58,14 +58,23 @@ function localTime(iso) {
   return iso ? new Date(iso).toLocaleString() : "";
 }
 
-// "sg-0abc · us-east-1" as safe HTML. The AWS ID tells two same-named resources
-// apart, and it's what you search for in the AWS console. (A bucket's ID is its
-// name, so it isn't repeated.) The ID never breaks in the middle of a line.
+// Which AWS service each check looks at. Security groups, Elastic IPs and EBS volumes
+// are all managed through EC2, so four of the five checks say EC2.
+const SERVICE = {
+  unused_eip: "EC2", open_admin_ports: "EC2", unattached_ebs: "EC2", idle_ec2: "EC2",
+  public_bucket: "S3",
+};
+
+// "[EC2] sg-0abc · us-east-1" as safe HTML. The service tag says where to look in the
+// console; the AWS ID tells two same-named resources apart and is what you search for
+// there. (A bucket's ID is its name, so it isn't repeated.) The ID never breaks in the
+// middle of a line.
 function idAndRegion(f) {
   if (!f) return "";
+  const service = SERVICE[f.check] ? `<span class="cat">${SERVICE[f.check]}</span>` : "";
   const id = f.resource_id && f.resource_id !== f.resource_name
     ? `<span class="nowrap">${esc(f.resource_id)}</span> · ` : "";
-  return id + esc(f.region);
+  return service + id + esc(f.region);
 }
 
 // Browser errors like "Failed to fetch" mean nothing to most people: say what to check.
